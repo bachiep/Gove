@@ -60,4 +60,4 @@ The MVP proves one complete ride lifecycle for three roles through a responsive 
 
 ## Out of scope for MVP
 
-Real payments, background mobile tracking, traffic-aware routing, pooling, promotions, ratings, multi-stop rides, scheduled rides, production high availability, and delivery fulfillment.
+Real payments, background mobile tracking, traffic-aware routing, pooling, promotions, ratings, multi-stop rides, scheduled rides, and production high availability. Delivery fulfillment is designed as the separate M7 extension in [M7 logistics requirements](logistics-m7.md).

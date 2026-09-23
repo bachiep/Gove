@@ -1,6 +1,7 @@
 # Gove Domain Language
 
-Canonical language for the ride-hailing domain. Delivery is a later context and must not be modeled as a renamed Trip.
+Canonical language for the ride-hailing and logistics domains. Delivery is a
+separate context and must not be modeled as a renamed Trip.
 
 ## Actors
 
@@ -93,3 +94,29 @@ _Avoid_: Driver location when historical points are intended
 **Payment Attempt**:
 One idempotent effort to authorize or capture money for a completed Trip.
 _Avoid_: Payment when the lifecycle state is relevant, transaction
+
+## Logistics
+
+**Delivery Request**:
+A Customer's intent to have one Parcel transferred from a Pickup to a Dropoff
+for a Recipient.
+_Avoid_: Trip, Order when a durable Delivery has not been created
+
+**Delivery**:
+The durable logistics aggregate that records Parcel custody and recipient
+handoff through its own lifecycle.
+_Avoid_: Trip, Ride, Shipment when its aggregate state is intended
+
+**Parcel**:
+The declared item or item group carried by a Delivery, with bounded manifest
+data relevant to handling.
+_Avoid_: Order, Package when the business item is intended
+
+**Recipient**:
+The intended handoff party for a Delivery. A Recipient is not necessarily a
+User or Customer.
+_Avoid_: Customer, Passenger
+
+**Delivery Proof**:
+The minimum durable evidence that the Parcel was handed to the Recipient.
+_Avoid_: Trip completion, signature when media or identity verification is not intended

@@ -15,7 +15,9 @@ Documentation records intended behavior and verified evidence. It must distingui
 | [Technical debt register](project/technical-debt-register.md)           | Deliberate deferrals and removal triggers         | Active         |
 | [Open questions](project/open-questions.md)                             | Non-blocking decisions requiring later evidence   | Active         |
 | [MVP requirements](requirements/mvp.md)                                 | Functional and non-functional baseline            | Draft          |
+| [M7 logistics requirements](requirements/logistics-m7.md)               | Delivery extension baseline                       | Designed       |
 | [Trip lifecycle](domain/trip-lifecycle.md)                              | State machines and invariants                     | Tested         |
+| [Delivery lifecycle](domain/delivery-lifecycle.md)                      | Separate parcel custody state machine             | Designed       |
 | [Architecture overview](architecture/overview.md)                       | Runtime shape, modules, and data flow             | Designed       |
 | [Data ownership](architecture/data-ownership.md)                        | Authoritative writers and projections             | Designed       |
 | [Failure model](architecture/failure-model.md)                          | Dependency failures and expected behavior         | Designed       |
@@ -49,6 +51,7 @@ Documentation records intended behavior and verified evidence. It must distingui
 | [0006](adr/0006-dispatch-reservation-and-offer-boundary.md) | Keep Dispatch correctness in PostgreSQL                 | Accepted |
 | [0007](adr/0007-authenticated-realtime-gateway.md)          | Add an authenticated realtime delivery boundary         | Accepted |
 | [0008](adr/0008-completion-and-simulator-payment.md)        | Complete from observed metering and simulate settlement | Accepted |
+| [0009](adr/0009-separate-delivery-aggregate.md)             | Keep Delivery separate from Trip                        | Accepted |
 
 ## Evidence rules
 
