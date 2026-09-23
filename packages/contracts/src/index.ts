@@ -198,3 +198,23 @@ export interface DeliveryResponse {
   declaredWeightGrams: number;
   createdAt: string;
 }
+
+export type DeliveryOfferState = 'PENDING' | 'ACCEPTED' | 'EXPIRED';
+
+export interface DeliveryOfferResponse {
+  id: string;
+  deliveryId: string;
+  driverId: string;
+  attemptNumber: number;
+  status: DeliveryOfferState;
+  expiresAt: string;
+  deliveryState: DeliveryState;
+  deliveryVersion: number;
+}
+
+export interface DeliveryMatchResponse {
+  deliveryId: string;
+  deliveryState: DeliveryState;
+  deliveryVersion: number;
+  offer: DeliveryOfferResponse | null;
+}

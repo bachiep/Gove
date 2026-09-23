@@ -30,3 +30,6 @@ export const createDeliverySchema = z
   );
 
 export type CreateDeliveryInput = z.infer<typeof createDeliverySchema>;
+
+export const deliveryParamsSchema = z.object({ deliveryId: z.uuid() });
+export const deliveryOfferParamsSchema = z.object({ offerId: z.uuid() });

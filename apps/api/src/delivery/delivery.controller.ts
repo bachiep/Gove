@@ -25,6 +25,7 @@ import type { SessionActor } from '../identity/identity.types.js';
 import { Roles } from '../identity/roles.decorator.js';
 import { RolesGuard } from '../identity/roles.guard.js';
 import { createDeliverySchema } from './delivery.schemas.js';
+import { deliveryParamsSchema } from './delivery.schemas.js';
 import { DeliveryService } from './delivery.service.js';
 
 @ApiTags('delivery')
@@ -72,5 +73,34 @@ export class DeliveryController {
     @Param('deliveryId') deliveryId: string,
   ): Promise<DeliveryResponse> {
     return this.deliveries.findForCustomer(actor.id, deliveryId);
+  }
+
+  @Post(':deliveryId/match')
+  @ApiOperation({
+    summary: 'Start one idempotent matching attempt for a Delivery',
+  })
+  match(
+    @CurrentActor() actor: SessionActor,
+    @Param() params: unknown,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+  ) {
+    if (
+      !idempotencyKey ||
+      idempotencyKey.length < 8 ||
+      idempotencyKey.length > 128
+    ) {
+      throw new ApiError(
+        HttpStatus.BAD_REQUEST,
+        'IDEMPOTENCY_KEY_REQUIRED',
+        'A valid Idempotency-Key header is required.',
+      );
+    }
+    return this.deliveries.startMatching({
+      customerUserId: actor.id,
+      deliveryId: parseInput(deliveryParamsSchema, params).deliveryId,
+      idempotencyKey,
+      correlationId,
+    });
   }
 }
