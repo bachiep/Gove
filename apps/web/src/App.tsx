@@ -2,8 +2,10 @@ import type {
   ApiErrorResponse,
   AuthenticatedActor,
   AuthenticationResponse,
+  FareQuoteResponse,
   ReadinessResponse,
   RegistrationResponse,
+  TripResponse,
 } from '@gove/contracts';
 import {
   ArrowLeft,
@@ -23,7 +25,8 @@ type ApiState =
   | { status: 'checking' }
   | { status: 'ready'; details: ReadinessResponse }
   | { status: 'unavailable' };
-type Page = 'home' | 'register' | 'sign-in' | 'account' | 'driver-setup';
+type Page =
+  'home' | 'register' | 'sign-in' | 'account' | 'driver-setup' | 'ride-request';
 type RequestState =
   | { state: 'idle' }
   | { state: 'submitting' }
@@ -53,6 +56,7 @@ function pageFromLocation(): Page {
   if (path === '/sign-in') return 'sign-in';
   if (path === '/account') return 'account';
   if (path === '/driver/setup') return 'driver-setup';
+  if (path === '/ride/request') return 'ride-request';
   return 'home';
 }
 
@@ -108,6 +112,7 @@ export function App() {
       'sign-in': '/sign-in',
       account: '/account',
       'driver-setup': '/driver/setup',
+      'ride-request': '/ride/request',
     };
     window.history.pushState({}, '', path[next]);
     setPage(next);
@@ -166,6 +171,15 @@ export function App() {
             actor={actor}
             onSignIn={() => navigate('sign-in')}
             onDriverSetup={() => navigate('driver-setup')}
+            onRideRequest={() => navigate('ride-request')}
+          />
+        ) : null}
+        {page === 'ride-request' ? (
+          <RideRequestPage
+            actor={actor}
+            accessToken={accessToken}
+            onSignIn={() => navigate('sign-in')}
+            onAccount={() => navigate('account')}
           />
         ) : null}
         {page === 'driver-setup' ? (
@@ -536,10 +550,12 @@ function AccountPage({
   actor,
   onSignIn,
   onDriverSetup,
+  onRideRequest,
 }: {
   actor: AuthenticatedActor | null;
   onSignIn: () => void;
   onDriverSetup: () => void;
+  onRideRequest: () => void;
 }) {
   if (!actor) return <AccessRequired onSignIn={onSignIn} />;
   return (
@@ -549,7 +565,7 @@ function AccountPage({
         <h1>Welcome, {actor.displayName}.</h1>
         <p>
           This account foundation establishes identity and an explicit session
-          before the ride flow is introduced.
+          before requesting a ride.
         </p>
       </div>
       <article className="account-card">
@@ -572,15 +588,538 @@ function AccountPage({
             Complete driver setup{' '}
             <ArrowRight aria-hidden="true" size={20} weight="bold" />
           </button>
+        ) : actor.roles.includes('CUSTOMER') ? (
+          <div className="account-action-stack">
+            <button
+              className="primary-link"
+              type="button"
+              onClick={onRideRequest}
+            >
+              Plan a ride{' '}
+              <ArrowRight aria-hidden="true" size={20} weight="bold" />
+            </button>
+            <p className="notice">
+              Use the manual demo flow to request an estimated Fare Quote.
+              Driver matching is not available yet.
+            </p>
+          </div>
         ) : (
           <p className="notice">
-            Ride requests are part of the next vertical slice. This customer
-            identity is ready for that boundary.
+            This role has no customer ride-request action.
           </p>
         )}
       </article>
     </section>
   );
+}
+
+type RideFormValues = {
+  pickupLabel: string;
+  pickupLatitude: string;
+  pickupLongitude: string;
+  dropoffLabel: string;
+  dropoffLatitude: string;
+  dropoffLongitude: string;
+  serviceType: 'MOTORBIKE_STANDARD' | 'CAR_STANDARD';
+};
+
+const initialRideForm: RideFormValues = {
+  pickupLabel: 'Demo pickup',
+  pickupLatitude: '10.7600',
+  pickupLongitude: '106.6800',
+  dropoffLabel: 'Demo dropoff',
+  dropoffLatitude: '10.7800',
+  dropoffLongitude: '106.7000',
+  serviceType: 'MOTORBIKE_STANDARD',
+};
+
+function RideRequestPage({
+  actor,
+  accessToken,
+  onSignIn,
+  onAccount,
+}: {
+  actor: AuthenticatedActor | null;
+  accessToken: string | null;
+  onSignIn: () => void;
+  onAccount: () => void;
+}) {
+  const [form, setForm] = useState<RideFormValues>(initialRideForm);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
+  const [trip, setTrip] = useState<TripResponse | null>(null);
+  const [quoteState, setQuoteState] = useState<RequestState>({ state: 'idle' });
+  const [tripState, setTripState] = useState<RequestState>({ state: 'idle' });
+  const [now, setNow] = useState(() => Date.now());
+  const errorSummaryRef = useRef<HTMLDivElement>(null);
+  const quoteKeyRef = useRef(crypto.randomUUID());
+  const tripKeyRef = useRef(crypto.randomUUID());
+
+  useEffect(() => {
+    if (!Object.keys(fieldErrors).length) return;
+    errorSummaryRef.current?.focus();
+  }, [fieldErrors]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  if (!actor || !accessToken || !actor.roles.includes('CUSTOMER')) {
+    return <AccessRequired onSignIn={onSignIn} />;
+  }
+
+  const quoteExpired = quote
+    ? new Date(quote.expiresAt).getTime() <= now
+    : false;
+  const activeQuote = quote;
+  const setValue = (name: keyof RideFormValues, value: string) => {
+    setForm((current) => ({ ...current, [name]: value }));
+    setFieldErrors((current) => {
+      if (!current[name]) return current;
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
+  };
+
+  const handleQuote = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const errors = validateRideForm(form);
+    if (Object.keys(errors).length) {
+      setFieldErrors(errors);
+      return;
+    }
+    if (quote) {
+      setQuote(null);
+      setTrip(null);
+      quoteKeyRef.current = crypto.randomUUID();
+      tripKeyRef.current = crypto.randomUUID();
+    }
+    setQuoteState({ state: 'submitting' });
+    try {
+      const result = await request<FareQuoteResponse>('/pricing/fare-quotes', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'idempotency-key': quoteKeyRef.current,
+        },
+        body: JSON.stringify({
+          pickup: {
+            label: form.pickupLabel,
+            latitude: Number(form.pickupLatitude),
+            longitude: Number(form.pickupLongitude),
+          },
+          dropoff: {
+            label: form.dropoffLabel,
+            latitude: Number(form.dropoffLatitude),
+            longitude: Number(form.dropoffLongitude),
+          },
+          serviceType: form.serviceType,
+        }),
+      });
+      setQuote(result);
+      setTrip(null);
+      setQuoteState({ state: 'idle' });
+    } catch (error) {
+      setQuoteState({ state: 'error', message: (error as Error).message });
+    }
+  };
+
+  const editLocations = () => {
+    setQuote(null);
+    setTrip(null);
+    setQuoteState({ state: 'idle' });
+    setTripState({ state: 'idle' });
+    quoteKeyRef.current = crypto.randomUUID();
+    tripKeyRef.current = crypto.randomUUID();
+  };
+
+  const handleTrip = async () => {
+    if (!quote || quoteExpired) return;
+    setTripState({ state: 'submitting' });
+    try {
+      const result = await request<TripResponse>('/trips', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'idempotency-key': tripKeyRef.current,
+        },
+        body: JSON.stringify({ fareQuoteId: quote.id }),
+      });
+      setTrip(result);
+      setTripState({ state: 'idle' });
+    } catch (error) {
+      setTripState({ state: 'error', message: (error as Error).message });
+    }
+  };
+
+  return (
+    <section className="ride-layout">
+      <div className="ride-intro">
+        <p className="eyebrow">Customer ride request</p>
+        <h1>Plan one clear journey.</h1>
+        <p>
+          This is the M2 demo boundary: manual locations, a deterministic
+          estimated Fare Quote, and a durable request. Routing, drivers,
+          matching, and payment arrive in later milestones.
+        </p>
+        <button className="back-link" type="button" onClick={onAccount}>
+          <ArrowLeft aria-hidden="true" size={18} /> Account
+        </button>
+      </div>
+      <div className="ride-card-stack">
+        {!activeQuote ? (
+          <form className="auth-card ride-card" onSubmit={handleQuote}>
+            <FormHeading
+              title="Plan a ride"
+              subtitle="Use synthetic demo coordinates inside the current service area."
+            />
+            {Object.keys(fieldErrors).length ? (
+              <div
+                className="form-error-summary"
+                role="alert"
+                tabIndex={-1}
+                ref={errorSummaryRef}
+              >
+                <strong>Check the highlighted fields.</strong>
+                <ul>
+                  {Object.entries(fieldErrors).map(([field, message]) => (
+                    <li key={field}>
+                      <a href={`#${field}`}>{message}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <fieldset className="location-fieldset">
+              <legend>Pickup</legend>
+              <label htmlFor="pickupLabel">Label</label>
+              <input
+                id="pickupLabel"
+                value={form.pickupLabel}
+                onChange={(event) =>
+                  setValue('pickupLabel', event.target.value)
+                }
+                aria-invalid={Boolean(fieldErrors.pickupLabel)}
+                aria-describedby={
+                  fieldErrors.pickupLabel ? 'pickupLabel-error' : undefined
+                }
+              />
+              {fieldErrors.pickupLabel ? (
+                <small id="pickupLabel-error" className="field-error">
+                  {fieldErrors.pickupLabel}
+                </small>
+              ) : null}
+              <div className="form-grid">
+                <div>
+                  <label htmlFor="pickupLatitude">Latitude</label>
+                  <input
+                    id="pickupLatitude"
+                    inputMode="decimal"
+                    value={form.pickupLatitude}
+                    onChange={(event) =>
+                      setValue('pickupLatitude', event.target.value)
+                    }
+                    aria-invalid={Boolean(fieldErrors.pickupLatitude)}
+                    aria-describedby={
+                      fieldErrors.pickupLatitude
+                        ? 'pickupLatitude-error'
+                        : undefined
+                    }
+                  />
+                  {fieldErrors.pickupLatitude ? (
+                    <small id="pickupLatitude-error" className="field-error">
+                      {fieldErrors.pickupLatitude}
+                    </small>
+                  ) : null}
+                </div>
+                <div>
+                  <label htmlFor="pickupLongitude">Longitude</label>
+                  <input
+                    id="pickupLongitude"
+                    inputMode="decimal"
+                    value={form.pickupLongitude}
+                    onChange={(event) =>
+                      setValue('pickupLongitude', event.target.value)
+                    }
+                    aria-invalid={Boolean(fieldErrors.pickupLongitude)}
+                    aria-describedby={
+                      fieldErrors.pickupLongitude
+                        ? 'pickupLongitude-error'
+                        : undefined
+                    }
+                  />
+                  {fieldErrors.pickupLongitude ? (
+                    <small id="pickupLongitude-error" className="field-error">
+                      {fieldErrors.pickupLongitude}
+                    </small>
+                  ) : null}
+                </div>
+              </div>
+            </fieldset>
+            <fieldset className="location-fieldset">
+              <legend>Dropoff</legend>
+              <label htmlFor="dropoffLabel">Label</label>
+              <input
+                id="dropoffLabel"
+                value={form.dropoffLabel}
+                onChange={(event) =>
+                  setValue('dropoffLabel', event.target.value)
+                }
+                aria-invalid={Boolean(fieldErrors.dropoffLabel)}
+                aria-describedby={
+                  fieldErrors.dropoffLabel ? 'dropoffLabel-error' : undefined
+                }
+              />
+              {fieldErrors.dropoffLabel ? (
+                <small id="dropoffLabel-error" className="field-error">
+                  {fieldErrors.dropoffLabel}
+                </small>
+              ) : null}
+              <div className="form-grid">
+                <div>
+                  <label htmlFor="dropoffLatitude">Latitude</label>
+                  <input
+                    id="dropoffLatitude"
+                    inputMode="decimal"
+                    value={form.dropoffLatitude}
+                    onChange={(event) =>
+                      setValue('dropoffLatitude', event.target.value)
+                    }
+                    aria-invalid={Boolean(fieldErrors.dropoffLatitude)}
+                    aria-describedby={
+                      fieldErrors.dropoffLatitude
+                        ? 'dropoffLatitude-error'
+                        : undefined
+                    }
+                  />
+                  {fieldErrors.dropoffLatitude ? (
+                    <small id="dropoffLatitude-error" className="field-error">
+                      {fieldErrors.dropoffLatitude}
+                    </small>
+                  ) : null}
+                </div>
+                <div>
+                  <label htmlFor="dropoffLongitude">Longitude</label>
+                  <input
+                    id="dropoffLongitude"
+                    inputMode="decimal"
+                    value={form.dropoffLongitude}
+                    onChange={(event) =>
+                      setValue('dropoffLongitude', event.target.value)
+                    }
+                    aria-invalid={Boolean(fieldErrors.dropoffLongitude)}
+                    aria-describedby={
+                      fieldErrors.dropoffLongitude
+                        ? 'dropoffLongitude-error'
+                        : undefined
+                    }
+                  />
+                  {fieldErrors.dropoffLongitude ? (
+                    <small id="dropoffLongitude-error" className="field-error">
+                      {fieldErrors.dropoffLongitude}
+                    </small>
+                  ) : null}
+                </div>
+              </div>
+            </fieldset>
+            <label htmlFor="serviceType">Service type</label>
+            <select
+              id="serviceType"
+              value={form.serviceType}
+              onChange={(event) => setValue('serviceType', event.target.value)}
+            >
+              <option value="MOTORBIKE_STANDARD">Standard motorbike</option>
+              <option value="CAR_STANDARD">Standard car</option>
+            </select>
+            <p className="helper-copy">
+              No map or road routing is used in this demo. The amount is an
+              estimated quote, not a final fare.
+            </p>
+            <SubmitState
+              state={quoteState}
+              label={quote ? 'Refresh estimated quote' : 'Get estimated quote'}
+            />
+          </form>
+        ) : !trip && activeQuote ? (
+          <article
+            className="auth-card quote-card"
+            aria-labelledby="quote-heading"
+          >
+            <div className="quote-kicker">
+              <span className="planned-badge">Estimated quote</span>
+              <span>
+                {activeQuote.serviceType === 'MOTORBIKE_STANDARD'
+                  ? 'Standard motorbike'
+                  : 'Standard car'}
+              </span>
+            </div>
+            <h2 id="quote-heading">
+              {formatFare(activeQuote.totalFareMinor, activeQuote.currency)}
+            </h2>
+            <p className="quote-description">
+              This estimate uses the saved pricing rule snapshot and synthetic
+              straight-line distance. It is not a final fare.
+            </p>
+            <dl className="quote-details">
+              <div>
+                <dt>Pickup</dt>
+                <dd>{activeQuote.pickup.label}</dd>
+              </div>
+              <div>
+                <dt>Dropoff</dt>
+                <dd>{activeQuote.dropoff.label}</dd>
+              </div>
+              <div>
+                <dt>Estimated distance</dt>
+                <dd>{formatDistance(activeQuote.estimatedDistanceMeters)}</dd>
+              </div>
+              <div>
+                <dt>Expires</dt>
+                <dd>
+                  {new Date(activeQuote.expiresAt).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </dd>
+              </div>
+            </dl>
+            {quoteExpired ? (
+              <p className="form-error" role="alert">
+                This quote expired. Refresh it before creating a ride request.
+              </p>
+            ) : (
+              <p className="quote-expiry">
+                Quote available until{' '}
+                {new Date(activeQuote.expiresAt).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}{' '}
+                <span aria-hidden="true">
+                  ({formatRemaining(activeQuote.expiresAt, now)})
+                </span>
+              </p>
+            )}
+            <div className="quote-actions">
+              <button
+                className="primary-link"
+                type="button"
+                disabled={quoteExpired || tripState.state === 'submitting'}
+                onClick={handleTrip}
+              >
+                {tripState.state === 'submitting'
+                  ? 'Recording request…'
+                  : 'Create ride request'}{' '}
+                <ArrowRight aria-hidden="true" size={20} weight="bold" />
+              </button>
+              <button
+                className="secondary-link"
+                type="button"
+                onClick={editLocations}
+              >
+                Edit locations
+              </button>
+            </div>
+            {tripState.state === 'error' ? (
+              <p className="form-error" role="alert">
+                {tripState.message}
+              </p>
+            ) : null}
+          </article>
+        ) : null}
+        {quoteState.state === 'error' && !quote ? (
+          <p className="form-error standalone-error" role="alert">
+            {quoteState.message}
+          </p>
+        ) : null}
+        {trip ? (
+          <article className="auth-card trip-success" role="status">
+            <span className="success-icon">
+              <CheckCircle aria-hidden="true" size={28} weight="fill" />
+            </span>
+            <p className="eyebrow">Request recorded</p>
+            <h2>
+              Your ride request is <code>REQUESTED</code>.
+            </h2>
+            <p>
+              Matching is not available in this milestone. Gove has stored your
+              request and will add dispatch in the next stage.
+            </p>
+            <dl className="quote-details">
+              <div>
+                <dt>Trip reference</dt>
+                <dd>{trip.id}</dd>
+              </div>
+              <div>
+                <dt>Estimated fare</dt>
+                <dd>{formatFare(trip.quotedTotalFareMinor, trip.currency)}</dd>
+              </div>
+            </dl>
+            <button
+              className="secondary-link"
+              type="button"
+              onClick={onAccount}
+            >
+              Return to account
+            </button>
+          </article>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function validateRideForm(form: RideFormValues): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const fields: Array<[keyof RideFormValues, string, number, number]> = [
+    ['pickupLatitude', 'Pickup latitude', -90, 90],
+    ['pickupLongitude', 'Pickup longitude', -180, 180],
+    ['dropoffLatitude', 'Dropoff latitude', -90, 90],
+    ['dropoffLongitude', 'Dropoff longitude', -180, 180],
+  ];
+  if (!form.pickupLabel.trim()) errors.pickupLabel = 'Enter a pickup label.';
+  if (!form.dropoffLabel.trim()) errors.dropoffLabel = 'Enter a dropoff label.';
+  for (const [field, label, minimum, maximum] of fields) {
+    const value = Number(form[field]);
+    if (
+      form[field].trim() === '' ||
+      !Number.isFinite(value) ||
+      value < minimum ||
+      value > maximum
+    )
+      errors[field] = `${label} must be between ${minimum} and ${maximum}.`;
+  }
+  if (
+    !errors.pickupLatitude &&
+    !errors.pickupLongitude &&
+    !errors.dropoffLatitude &&
+    !errors.dropoffLongitude &&
+    Number(form.pickupLatitude) === Number(form.dropoffLatitude) &&
+    Number(form.pickupLongitude) === Number(form.dropoffLongitude)
+  )
+    errors.dropoffLatitude = 'Pickup and dropoff must differ.';
+  return errors;
+}
+
+function formatFare(amount: number, currency: string): string {
+  return new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function formatDistance(meters: number): string {
+  return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`;
+}
+
+function formatRemaining(expiresAt: string, now: number): string {
+  const seconds = Math.max(
+    0,
+    Math.ceil((new Date(expiresAt).getTime() - now) / 1000),
+  );
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s remaining`;
 }
 
 function DriverSetupPage({

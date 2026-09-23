@@ -22,7 +22,7 @@ Documentation records intended behavior and verified evidence. It must distingui
 | [Testing strategy](testing/strategy.md)                                 | Test levels and evidence gates                  | Accepted       |
 | [Local development](operations/local-development.md)                    | Reproducible local environment                  | Tested locally |
 | [Vertical slice 01](implementation/vertical-slice-01.md)                | First implementation sequence                   | Accepted       |
-| [Vertical slice 02](implementation/vertical-slice-02.md)                | Quote and durable Ride Request design           | Designed       |
+| [Vertical slice 02](implementation/vertical-slice-02.md)                | Quote, durable Ride Request, and customer PWA   | Tested locally |
 | [Product design system](design/design-system.md)                        | UI tokens and interaction rules                 | Designed       |
 | [Authentication API](api/authentication.md)                             | Auth/session and driver self-service contracts  | Tested locally |
 | [Ride request API](api/ride-requests.md)                                | M2 quote and Trip creation contracts            | Tested locally |

@@ -1,6 +1,6 @@
 # Vertical Slice 02 — Quote to Durable Ride Request
 
-Status: Designed
+Status: Implemented and tested locally
 Last updated: 2026-09-24
 
 ## Objective
@@ -42,4 +42,6 @@ Initial service types are `MOTORBIKE_STANDARD` and `CAR_STANDARD`. Each has an i
 - Pricing unit tests cover integer arithmetic, rounding, bounded surge, invalid values, and snapshot isolation.
 - HTTP integration tests cover customer authorization, invalid zone/identical points, quote expiry, quote ownership, duplicate Trip creation, and concurrent consumption of one quote.
 - Migration re-execution succeeds; no credential or personal demo identity is seeded.
-- The customer flow is keyboard usable at 375px and displays an estimated fare, exact quote expiry, and `REQUESTED` result without a fake operational state.
+- The customer PWA flow was browser-tested locally from registration through sign-in, quote creation, and `REQUESTED` Trip creation.
+- The flow was checked at a 375px viewport with accessibility snapshots, linked field validation, exact quote expiry, and no console errors or warnings.
+- GitHub CI execution and an authenticated automated browser test in CI remain unverified; local browser evidence is not presented as deployment evidence.
