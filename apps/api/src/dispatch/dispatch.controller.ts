@@ -101,4 +101,32 @@ export class DispatchController {
       correlationId,
     });
   }
+
+  @Post('dispatch/offers/:offerId/reject')
+  @Roles('DRIVER')
+  @ApiOperation({ summary: 'Reject one pending Trip Offer' })
+  async rejectOffer(
+    @CurrentActor() actor: SessionActor,
+    @Param() params: unknown,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+  ) {
+    if (
+      !idempotencyKey ||
+      idempotencyKey.length < 8 ||
+      idempotencyKey.length > 128
+    ) {
+      throw new ApiError(
+        HttpStatus.BAD_REQUEST,
+        'IDEMPOTENCY_KEY_REQUIRED',
+        'A valid Idempotency-Key header is required.',
+      );
+    }
+    return this.dispatch.rejectOffer({
+      driverUserId: actor.id,
+      offerId: parseInput(dispatchOfferParamsSchema, params).offerId,
+      idempotencyKey,
+      correlationId,
+    });
+  }
 }

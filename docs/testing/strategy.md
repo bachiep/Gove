@@ -33,7 +33,7 @@ Correctness evidence is organized around module interfaces and business invarian
 
 CI runs at least 100 iterations for each deterministic race scenario; a pre-demo stress gate runs 1,000 iterations. Acceptance requires no duplicate assignment, duplicate capture, or invalid state transition.
 
-An architecture test rejects imports of another module's repository or persistence adapter. Cross-module behavior must use the owning module's interface.
+An architecture test rejects imports of another module's repository or persistence adapter. Cross-module commands must use the owning module's interface; explicitly documented read-only projection queries, such as the Realtime Trip snapshot, may compose owner tables without writing them.
 
 ## Browser scenarios
 

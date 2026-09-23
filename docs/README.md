@@ -24,22 +24,26 @@ Documentation records intended behavior and verified evidence. It must distingui
 | [Vertical slice 01](implementation/vertical-slice-01.md)                | First implementation sequence                   | Accepted       |
 | [Vertical slice 02](implementation/vertical-slice-02.md)                | Quote, durable Ride Request, and customer PWA   | Tested locally |
 | [Vertical slice 03](implementation/vertical-slice-03.md)                | Dispatch, reservation, and acceptance boundary  | Tested locally |
+| [Vertical slice 04](implementation/vertical-slice-04.md)                | Authenticated realtime Trip updates             | Tested locally |
 | [Product design system](design/design-system.md)                        | UI tokens and interaction rules                 | Designed       |
 | [Authentication API](api/authentication.md)                             | Auth/session and driver self-service contracts  | Tested locally |
 | [Ride request API](api/ride-requests.md)                                | M2 quote and Trip creation contracts            | Tested locally |
 | [Dispatch API](api/dispatch.md)                                         | M3 location, matching, offers, and acceptance   | Tested locally |
+| [Realtime API](api/realtime.md)                                         | WebSocket Trip snapshots, events, and locations | Tested locally |
 | [Authentication boundary](security/authentication-and-authorization.md) | Implemented identity controls and limitations   | Tested locally |
 | [Identity and driver data](data/identity-driver-schema.md)              | M1 ownership, schema, and migration rules       | Implemented    |
 
 ## Architecture decisions
 
-| ADR                                                   | Decision                                 | Status   |
-| ----------------------------------------------------- | ---------------------------------------- | -------- |
-| [0001](adr/0001-modular-monolith-first.md)            | Begin with a modular monolith            | Accepted |
-| [0002](adr/0002-postgresql-is-the-source-of-truth.md) | PostgreSQL owns durable business state   | Accepted |
-| [0003](adr/0003-transactional-outbox.md)              | Publish durable events through an outbox | Accepted |
-| [0004](adr/0004-rotating-refresh-sessions.md)         | Rotate opaque refresh sessions           | Accepted |
-| [0005](adr/0005-immutable-single-use-fare-quotes.md)  | Persist immutable single-use Fare Quotes | Accepted |
+| ADR                                                         | Decision                                        | Status   |
+| ----------------------------------------------------------- | ----------------------------------------------- | -------- |
+| [0001](adr/0001-modular-monolith-first.md)                  | Begin with a modular monolith                   | Accepted |
+| [0002](adr/0002-postgresql-is-the-source-of-truth.md)       | PostgreSQL owns durable business state          | Accepted |
+| [0003](adr/0003-transactional-outbox.md)                    | Publish durable events through an outbox        | Accepted |
+| [0004](adr/0004-rotating-refresh-sessions.md)               | Rotate opaque refresh sessions                  | Accepted |
+| [0005](adr/0005-immutable-single-use-fare-quotes.md)        | Persist immutable single-use Fare Quotes        | Accepted |
+| [0006](adr/0006-dispatch-reservation-and-offer-boundary.md) | Keep Dispatch correctness in PostgreSQL         | Accepted |
+| [0007](adr/0007-authenticated-realtime-gateway.md)          | Add an authenticated realtime delivery boundary | Accepted |
 
 ## Evidence rules
 

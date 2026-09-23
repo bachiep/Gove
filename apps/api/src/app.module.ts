@@ -7,6 +7,7 @@ import { HealthController } from './health/health.controller.js';
 import { IdentityModule } from './identity/identity.module.js';
 import { LocationModule } from './location/location.module.js';
 import { PricingModule } from './pricing/pricing.module.js';
+import { RealtimeModule } from './realtime/realtime.module.js';
 import { TripModule } from './trip/trip.module.js';
 
 @Module({
@@ -17,6 +18,7 @@ import { TripModule } from './trip/trip.module.js';
     DriverModule,
     LocationModule,
     PricingModule,
+    RealtimeModule,
     TripModule,
   ],
   controllers: [HealthController],

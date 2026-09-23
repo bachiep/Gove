@@ -879,6 +879,43 @@ footer span:first-child {
   margin: 20px 0 0;
 }
 
+.realtime-status {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 13px;
+  gap: 9px;
+  margin: 22px 0 0;
+  padding: 9px 12px;
+}
+
+.realtime-status > span {
+  background: #94a3b8;
+  border-radius: 50%;
+  height: 8px;
+  width: 8px;
+}
+
+.realtime-status--connected {
+  color: #166534;
+}
+
+.realtime-status--connected > span {
+  background: var(--success);
+  box-shadow: 0 0 0 4px rgb(22 131 74 / 12%);
+}
+
+.realtime-status--error > span,
+.realtime-status--disconnected > span {
+  background: #dc2626;
+}
+
+.trip-offer-notice {
+  margin-top: 18px;
+}
+
 .quote-actions {
   display: flex;
   flex-wrap: wrap;

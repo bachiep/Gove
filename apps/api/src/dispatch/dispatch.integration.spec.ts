@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApplication } from '../main.js';
 import { DatabaseService } from '../database/database.service.js';
+import { DispatchExpiryWorker } from './dispatch-expiry.worker.js';
 
 describe('Dispatch HTTP seam', () => {
   let app: Awaited<ReturnType<typeof createApplication>>;
@@ -26,6 +27,7 @@ describe('Dispatch HTTP seam', () => {
   it('offers one fresh eligible Driver and commits one concurrent acceptance', async () => {
     const customer = await registerAndLogin('CUSTOMER', 'Dispatch Customer');
     const driver = await registerAndLogin('DRIVER', 'Dispatch Driver');
+    await setAllAvailableDriversOffline();
     await approveDriver(driver.actorId, 'dispatch-accept');
     await sendLocationAndGoOnline(driver.accessToken);
 
@@ -84,6 +86,7 @@ describe('Dispatch HTTP seam', () => {
   it('expires an offer atomically and releases the Driver reservation', async () => {
     const customer = await registerAndLogin('CUSTOMER', 'Expiry Customer');
     const driver = await registerAndLogin('DRIVER', 'Expiry Driver');
+    await setAllAvailableDriversOffline();
     await approveDriver(driver.actorId, 'dispatch-expiry');
     await sendLocationAndGoOnline(driver.accessToken);
 
@@ -118,6 +121,61 @@ describe('Dispatch HTTP seam', () => {
     expect(workState.rows[0]?.work_state).toBe('AVAILABLE');
   });
 
+  it('sweeps an expired Offer once and closes matching when no replacement exists', async () => {
+    const customer = await registerAndLogin(
+      'CUSTOMER',
+      'Expiry Worker Customer',
+    );
+    const driver = await registerAndLogin('DRIVER', 'Expiry Worker Driver');
+    await setAllAvailableDriversOffline();
+    await database.query(
+      `UPDATE dispatch.trip_offers
+       SET expires_at = greatest(expires_at, now() + INTERVAL '1 hour')
+       WHERE status = 'PENDING'`,
+    );
+    await approveDriver(driver.actorId, 'dispatch-expiry-worker');
+    await sendLocationAndGoOnline(driver.accessToken);
+
+    const tripId = await createRequestedTrip(customer.accessToken);
+    const matching = await startMatching(customer.accessToken, tripId);
+    const offerId = matching.json().offer.id as string;
+    await database.query(
+      `UPDATE dispatch.trip_offers
+       SET offered_at = now() - INTERVAL '1 minute',
+           expires_at = now() - INTERVAL '1 second'
+       WHERE id = $1`,
+      [offerId],
+    );
+
+    const worker = app.get(DispatchExpiryWorker);
+    expect(await worker.runOnce()).toBe(1);
+    expect(await worker.runOnce()).toBe(0);
+
+    const state = await database.query<{
+      offer_status: string;
+      reservation_status: string;
+      work_state: string;
+      trip_state: string;
+    }>(
+      `SELECT o.status AS offer_status,
+              r.status AS reservation_status,
+              ws.work_state,
+              t.state AS trip_state
+       FROM dispatch.trip_offers o
+       JOIN dispatch.driver_reservations r ON r.id = o.reservation_id
+       JOIN dispatch.driver_work_states ws ON ws.driver_user_id = o.driver_user_id
+       JOIN trip.trips t ON t.id = o.trip_id
+       WHERE o.id = $1`,
+      [offerId],
+    );
+    expect(state.rows[0]).toMatchObject({
+      offer_status: 'EXPIRED',
+      reservation_status: 'EXPIRED',
+      work_state: 'AVAILABLE',
+      trip_state: 'NO_DRIVER_AVAILABLE',
+    });
+  });
+
   it('moves a Trip to NO_DRIVER_AVAILABLE when all locations are stale', async () => {
     const customer = await registerAndLogin('CUSTOMER', 'No Driver Customer');
     const driver = await registerAndLogin('DRIVER', 'Stale Driver');
@@ -143,6 +201,149 @@ describe('Dispatch HTTP seam', () => {
       tripId,
       tripState: 'NO_DRIVER_AVAILABLE',
       offer: null,
+    });
+  });
+
+  it('rejects an Offer, releases the Driver, and assigns one bounded replacement', async () => {
+    const customer = await registerAndLogin('CUSTOMER', 'Reject Customer');
+    const firstDriver = await registerAndLogin('DRIVER', 'Reject First Driver');
+    const secondDriver = await registerAndLogin(
+      'DRIVER',
+      'Reject Second Driver',
+    );
+    await setAllAvailableDriversOffline();
+    await approveDriver(firstDriver.actorId, 'dispatch-reject-first');
+    await approveDriver(secondDriver.actorId, 'dispatch-reject-second');
+    await sendLocationAndGoOnline(firstDriver.accessToken);
+    await sendLocationAndGoOnline(secondDriver.accessToken);
+
+    const tripId = await createRequestedTrip(customer.accessToken);
+    const matching = await startMatching(customer.accessToken, tripId);
+    const offeredDriverId = matching.json().offer.driverId as string;
+    const offeredDriver =
+      offeredDriverId === firstDriver.actorId ? firstDriver : secondDriver;
+    const replacementDriver =
+      offeredDriverId === firstDriver.actorId ? secondDriver : firstDriver;
+    const offerId = matching.json().offer.id as string;
+
+    const rejection = await rejectOffer(
+      offeredDriver.accessToken,
+      offerId,
+      randomUUID(),
+    );
+
+    expect(rejection.statusCode).toBe(201);
+    expect(rejection.json()).toMatchObject({
+      rejectedOffer: {
+        id: offerId,
+        status: 'REJECTED',
+        tripState: 'MATCHING',
+        tripVersion: 2,
+      },
+      reassignedOffer: {
+        tripId,
+        status: 'PENDING',
+        attemptNumber: 2,
+        driverId: replacementDriver.actorId,
+        tripState: 'MATCHING',
+        tripVersion: 2,
+      },
+    });
+
+    const dispatchState = await database.query<{
+      offer_status: string;
+      reservation_status: string;
+      work_state: string;
+      current_trip_id: string | null;
+    }>(
+      `SELECT o.status AS offer_status,
+              r.status AS reservation_status,
+              ws.work_state,
+              ws.current_trip_id
+       FROM dispatch.trip_offers o
+       JOIN dispatch.driver_reservations r ON r.id = o.reservation_id
+       JOIN dispatch.driver_work_states ws ON ws.driver_user_id = o.driver_user_id
+       WHERE o.id = $1`,
+      [offerId],
+    );
+    expect(dispatchState.rows[0]).toMatchObject({
+      offer_status: 'REJECTED',
+      reservation_status: 'RELEASED',
+      work_state: 'AVAILABLE',
+      current_trip_id: null,
+    });
+  });
+
+  it('replays a duplicate reject and does not create another Offer', async () => {
+    const customer = await registerAndLogin(
+      'CUSTOMER',
+      'Duplicate Reject Customer',
+    );
+    const driver = await registerAndLogin('DRIVER', 'Duplicate Reject Driver');
+    await setAllAvailableDriversOffline();
+    await approveDriver(driver.actorId, 'dispatch-reject-duplicate');
+    await sendLocationAndGoOnline(driver.accessToken);
+
+    const tripId = await createRequestedTrip(customer.accessToken);
+    const matching = await startMatching(customer.accessToken, tripId);
+    const offerId = matching.json().offer.id as string;
+    const rejectKey = randomUUID();
+    const [first, retry] = await Promise.all([
+      rejectOffer(driver.accessToken, offerId, rejectKey),
+      rejectOffer(driver.accessToken, offerId, rejectKey),
+    ]);
+
+    expect(first.statusCode).toBe(201);
+    expect(retry.statusCode).toBe(201);
+    expect(retry.json()).toEqual(first.json());
+    expect(first.json()).toMatchObject({
+      rejectedOffer: {
+        id: offerId,
+        status: 'REJECTED',
+        tripState: 'NO_DRIVER_AVAILABLE',
+        tripVersion: 3,
+      },
+      reassignedOffer: null,
+    });
+
+    const offers = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM dispatch.trip_offers WHERE trip_id = $1`,
+      [tripId],
+    );
+    expect(offers.rows[0]?.count).toBe('1');
+  });
+
+  it('does not accept a rejected Offer', async () => {
+    const customer = await registerAndLogin(
+      'CUSTOMER',
+      'Rejected Acceptance Customer',
+    );
+    const driver = await registerAndLogin(
+      'DRIVER',
+      'Rejected Acceptance Driver',
+    );
+    await setAllAvailableDriversOffline();
+    await approveDriver(driver.actorId, 'dispatch-rejected-acceptance');
+    await sendLocationAndGoOnline(driver.accessToken);
+
+    const tripId = await createRequestedTrip(customer.accessToken);
+    const matching = await startMatching(customer.accessToken, tripId);
+    const offerId = matching.json().offer.id as string;
+    const rejection = await rejectOffer(
+      driver.accessToken,
+      offerId,
+      randomUUID(),
+    );
+    expect(rejection.statusCode).toBe(201);
+
+    const acceptance = await acceptOffer(
+      driver.accessToken,
+      offerId,
+      randomUUID(),
+    );
+    expect(acceptance.statusCode).toBe(409);
+    expect(acceptance.json()).toMatchObject({
+      code: 'OFFER_ALREADY_RESOLVED',
     });
   });
 
@@ -216,6 +417,16 @@ describe('Dispatch HTTP seam', () => {
     expect(workState.statusCode).toBe(200);
   }
 
+  async function setAllAvailableDriversOffline(): Promise<void> {
+    await database.query(
+      `UPDATE dispatch.driver_work_states
+       SET work_state = 'OFFLINE', current_trip_id = NULL,
+           state_version = state_version + 1,
+           state_changed_at = now(), updated_at = now()
+       WHERE work_state = 'AVAILABLE'`,
+    );
+  }
+
   async function createRequestedTrip(accessToken: string): Promise<string> {
     const quote = await server.inject({
       method: 'POST',
@@ -275,6 +486,21 @@ describe('Dispatch HTTP seam', () => {
     return server.inject({
       method: 'POST',
       url: `/api/v1/dispatch/offers/${offerId}/accept`,
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'idempotency-key': idempotencyKey,
+      },
+    });
+  }
+
+  function rejectOffer(
+    accessToken: string,
+    offerId: string,
+    idempotencyKey: string,
+  ) {
+    return server.inject({
+      method: 'POST',
+      url: `/api/v1/dispatch/offers/${offerId}/reject`,
       headers: {
         authorization: `Bearer ${accessToken}`,
         'idempotency-key': idempotencyKey,

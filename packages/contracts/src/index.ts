@@ -116,3 +116,29 @@ export interface DispatchMatchResponse {
   tripVersion: number;
   offer: TripOfferResponse | null;
 }
+
+export interface DriverLocationSnapshot {
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  capturedAt: string;
+  receivedAt: string;
+}
+
+export interface TripRealtimeSnapshot extends TripResponse {
+  driverId: string | null;
+  driverLocation: DriverLocationSnapshot | null;
+}
+
+export interface RealtimeMetricsResponse {
+  activeConnections: number;
+  authenticatedConnections: number;
+  subscriptions: number;
+  locationMessages: number;
+  outboxEventsRelayed: number;
+}
+
+export interface DispatchOfferRejectionResponse {
+  rejectedOffer: TripOfferResponse;
+  reassignedOffer: TripOfferResponse | null;
+}

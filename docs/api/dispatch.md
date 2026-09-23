@@ -3,7 +3,7 @@
 Status: Partially implemented and tested locally
 Last updated: 2026-09-24
 
-These endpoints implement the M3 correctness boundary in the modular monolith. PostgreSQL owns the latest location projection, Driver Work State, Reservation, Trip Offer, and Trip transition. Redis, WebSocket delivery, and an asynchronous outbox consumer are not required for the current local path.
+These endpoints implement the M3 correctness boundary in the modular monolith. PostgreSQL owns the latest location projection, Driver Work State, Reservation, Trip Offer, and Trip transition. The M4 WebSocket gateway now delivers rebuildable Trip snapshots and committed outbox events; it does not own any of these business states.
 
 ## Driver location
 
@@ -39,10 +39,32 @@ The endpoint is a deterministic local trigger for this milestone. Production-sty
 
 Concurrent acceptance requests with the same key replay the committed response. A late acceptance expires the Offer, releases the Reservation, returns the Driver to `AVAILABLE`, and returns `OFFER_EXPIRED`.
 
+## Reject an offer
+
+`POST /api/v1/dispatch/offers/:offerId/reject` requires the offered Driver bearer token and an `Idempotency-Key`. The endpoint has no request body. One PostgreSQL transaction locks the Offer, Reservation, Work State, and Trip, then commits:
+
+- Offer `PENDING → REJECTED` with `DRIVER_REJECTED` resolution metadata;
+- Reservation `ACTIVE → RELEASED`;
+- Driver Work State `RESERVED → AVAILABLE`;
+- a `dispatch.offer.rejected` outbox event;
+- one bounded reassignment candidate, if a different fresh eligible Driver is available.
+
+The response is `{ rejectedOffer, reassignedOffer }`. Rejection increments the Trip aggregate version with a recorded `MATCHING → MATCHING` command. A replacement Offer is attempt `n + 1`, keeps the Trip in `MATCHING`, and is emitted as `dispatch.offer.reassigned` so the outbox uniqueness invariant remains valid at the new Trip version. The Driver who rejected the Offer is excluded from that immediate candidate search. If no candidate exists, the Trip moves to `NO_DRIVER_AVAILABLE` with one further versioned transition, and the response reflects that final version.
+
+Concurrent reject requests are serialized by a PostgreSQL advisory transaction lock and the Offer row lock. A duplicate request with the same key replays the stored `REJECT_OFFER` receipt; a different key after resolution returns `OFFER_ALREADY_RESOLVED`. A rejected Offer cannot subsequently be accepted.
+
+## Expiry worker
+
+The Dispatch module runs a bounded local sweep every five seconds. It selects
+pending Offers whose shared Reservation/Offer deadline has passed, applies the
+pure expiry policy, releases the Driver exactly once, writes
+`dispatch.offer.expired`, and attempts one replacement candidate. If no fresh
+candidate exists, the Trip moves to `NO_DRIVER_AVAILABLE`. The worker is
+best-effort process-local and the database transaction remains authoritative.
+
 ## Current limitations
 
-- Reject and explicit reassignment commands are designed but not implemented.
-- An expiry/retry worker is not implemented; the acceptance path repairs an overdue Offer when it is touched.
+- Reassignment is currently one bounded synchronous retry; a general retry policy and explicit Driver rejection reason are not implemented.
 - Driver approval is still an operator/database setup concern; there is no operator approval API.
-- The customer PWA does not yet display live Offer or Driver status.
+- The customer PWA displays the current Trip state, Trip version, and WebSocket connection status. A Driver Offer is shown as pending when the matching response includes one; a full Driver-facing Offer inbox is not implemented.
 - Freshness, offer TTL, radius, and candidate limits are local policy constants; no capacity or latency claim is made.

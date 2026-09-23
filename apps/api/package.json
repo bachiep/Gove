@@ -8,7 +8,7 @@
     "db:migrate": "tsx src/database/migrate.ts",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
-    "test": "vitest run",
+    "test": "vitest run --no-file-parallelism",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -26,10 +26,12 @@
     "pg": "8.23.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
+    "ws": "^8.21.3",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@nestjs/testing": "12.1.0",
-    "@types/pg": "8.23.1"
+    "@types/pg": "8.23.1",
+    "@types/ws": "^8.18.1"
   }
 }

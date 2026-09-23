@@ -37,9 +37,9 @@ The following is the proposed command and state sequence. It is a design, not
 verified implementation evidence.
 
 The current implementation verifies the start-matching, reservation, pending
-offer, acceptance, expiry repair, and no-fresh-driver portions locally. The
-remaining steps below stay designed until their commands and worker behavior
-are implemented.
+offer, acceptance, rejection/reassignment, expiry worker, expiry repair, and
+no-fresh-driver portions locally. The remaining steps below stay designed until
+asynchronous consumption and the broader retry policy are implemented.
 
 1. **Start dispatch** — An idempotent handler consumes `trip.created`, creates one
    Dispatch Request for the Trip, and asks the Trip module to transition
@@ -211,8 +211,8 @@ dependency.
 
 This slice does not yet implement or verify:
 
-- reject/reassignment source paths, an expiry worker, an asynchronous outbox
-  consumer, REST/WebSocket completion, or browser UI for dispatch;
+- an asynchronous outbox consumer, REST completion, or a full Driver-facing
+  Offer UI;
 - maps, geocoding, road-network routing, traffic, or customer/Driver ETA;
 - background Driver location tracking, location history retention, or GPS spoofing
   detection beyond the Location interface assumptions;
@@ -255,8 +255,9 @@ tests and recorded as evidence:
 - HTTP integration tests cover location ingestion, eligibility-gated availability,
   persisted matching replay, one-offer creation, concurrent acceptance, accepted
   Driver Work State, overdue Offer release, and stale-location no-driver result.
-- Reject/reassignment, an expiry worker, asynchronous outbox consumption, operator
-  approval, and real-time Offer UI remain planned.
+- Asynchronous outbox consumption, operator approval, and a full Driver-facing
+  Offer UI remain planned. Customer Trip status and the realtime gateway are
+  delivered in Vertical Slice 04.
 
 ## Verification status
 
@@ -265,9 +266,10 @@ freshness rule, Reservation/Offer TTL relationship, acceptance race outcomes,
 PostgreSQL transaction boundary, outbox intent, and exclusions.
 
 **Implemented and tested locally:** migration constraints, PostGIS candidate query,
-deterministic ranking, start-matching idempotency, concurrent acceptance, expiry
-repair, and stale-location exclusion.
+deterministic ranking, start-matching idempotency, concurrent acceptance,
+rejection/reassignment, bounded expiry sweep, expiry repair, and stale-location
+exclusion.
 
-**Not yet verified:** controlled-clock behavior, reject/reassignment, asynchronous
-outbox idempotency, failure recovery, browser behavior, and any performance or
+**Not yet verified:** controlled-clock behavior, asynchronous outbox idempotency,
+failure recovery, full Driver-facing browser behavior, and any performance or
 production-readiness claim.

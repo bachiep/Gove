@@ -9,6 +9,7 @@ export interface LatestLocationRow extends QueryResultRow {
   captured_at: Date;
   received_at: Date;
   sequence_number: string;
+  accepted: boolean;
 }
 
 @Injectable()
@@ -57,10 +58,11 @@ export class LocationRepository {
       ],
     );
 
-    if (result.rows[0]) return result.rows[0];
+    if (result.rows[0]) return { ...result.rows[0], accepted: true };
 
     const current = await this.database.query<LatestLocationRow>(
-      `SELECT driver_user_id, captured_at, received_at, sequence_number
+      `SELECT driver_user_id, captured_at, received_at, sequence_number,
+              false AS accepted
        FROM location.latest_driver_locations
        WHERE driver_user_id = $1`,
       [driverUserId],

@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { DispatchMatchResponse, TripOfferResponse } from '@gove/contracts';
+import type {
+  DispatchMatchResponse,
+  DispatchOfferRejectionResponse,
+  TripOfferResponse,
+} from '@gove/contracts';
 
 import { ApiError } from '../common/http/api-error.js';
 import {
@@ -58,6 +62,29 @@ export class DispatchService {
         correlationId: input.correlationId ?? randomUUID(),
       });
       if (!result.accepted) {
+        throw new DispatchCommandError(result.code);
+      }
+      return result.response;
+    } catch (error) {
+      throw this.mapError(error);
+    }
+  }
+
+  async rejectOffer(input: {
+    driverUserId: string;
+    offerId: string;
+    idempotencyKey: string;
+    correlationId?: string;
+  }): Promise<DispatchOfferRejectionResponse> {
+    try {
+      const result = await this.repository.rejectOffer({
+        ...input,
+        requestFingerprint: createHash('sha256')
+          .update(JSON.stringify({ offerId: input.offerId }))
+          .digest(),
+        correlationId: input.correlationId ?? randomUUID(),
+      });
+      if (!result.rejected) {
         throw new DispatchCommandError(result.code);
       }
       return result.response;

@@ -43,7 +43,8 @@ Identity and IDs are shared kernel types; business entities are not shared mutab
 ## Communication
 
 - REST `/api/v1` handles commands and authoritative snapshots.
-- WebSocket `/realtime` carries authenticated projections such as `trip.status.changed`, `trip.driver.location.updated`, and `trip.offer.received`.
+- WebSocket `/ws` carries authenticated projections such as Trip snapshots,
+  committed Trip events, and Driver location updates.
 - Each event carries an event ID, aggregate ID, aggregate version, occurred-at timestamp, and payload version.
 - A reconnect fetches the REST snapshot first, then subscribes from the latest known version when supported.
 - Durable asynchronous work is published from a transactional outbox. In-process handlers are the first adapter; a broker is added only when independent deployment exists.

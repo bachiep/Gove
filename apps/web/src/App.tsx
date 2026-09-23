@@ -2,10 +2,12 @@ import type {
   ApiErrorResponse,
   AuthenticatedActor,
   AuthenticationResponse,
+  DispatchMatchResponse,
   FareQuoteResponse,
   ReadinessResponse,
   RegistrationResponse,
   TripResponse,
+  TripRealtimeSnapshot,
 } from '@gove/contracts';
 import {
   ArrowLeft,
@@ -31,6 +33,13 @@ type RequestState =
   | { state: 'idle' }
   | { state: 'submitting' }
   | { state: 'error'; message: string };
+type RealtimeMessage = {
+  type: string;
+  snapshot?: TripRealtimeSnapshot;
+  tripId?: string;
+  payload?: unknown;
+  message?: string;
+};
 
 const roles = [
   {
@@ -61,10 +70,14 @@ function pageFromLocation(): Page {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers = new Headers(options.headers);
+  if (options.body && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json');
+  }
   const response = await fetch(`/api/v1${path}`, {
     ...options,
     credentials: 'include',
-    headers: { 'content-type': 'application/json', ...options.headers },
+    headers,
   });
   if (!response.ok) {
     const fallback = 'Something went wrong. Please try again.';
@@ -599,8 +612,8 @@ function AccountPage({
               <ArrowRight aria-hidden="true" size={20} weight="bold" />
             </button>
             <p className="notice">
-              Use the manual demo flow to request an estimated Fare Quote.
-              Driver matching is not available yet.
+              Use the manual demo flow to request a Fare Quote, create a Trip,
+              and observe the current dispatch state.
             </p>
           </div>
         ) : (
@@ -648,12 +661,17 @@ function RideRequestPage({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
   const [trip, setTrip] = useState<TripResponse | null>(null);
+  const [dispatch, setDispatch] = useState<DispatchMatchResponse | null>(null);
+  const [realtimeStatus, setRealtimeStatus] = useState<
+    'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
+  >('idle');
   const [quoteState, setQuoteState] = useState<RequestState>({ state: 'idle' });
   const [tripState, setTripState] = useState<RequestState>({ state: 'idle' });
   const [now, setNow] = useState(() => Date.now());
   const errorSummaryRef = useRef<HTMLDivElement>(null);
   const quoteKeyRef = useRef(crypto.randomUUID());
   const tripKeyRef = useRef(crypto.randomUUID());
+  const matchKeyRef = useRef(crypto.randomUUID());
 
   useEffect(() => {
     if (!Object.keys(fieldErrors).length) return;
@@ -664,6 +682,65 @@ function RideRequestPage({
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!trip?.id || !accessToken) {
+      setRealtimeStatus('idle');
+      return;
+    }
+
+    let disposed = false;
+    setRealtimeStatus('connecting');
+    const websocketProtocol =
+      window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const socket = new WebSocket(
+      `${websocketProtocol}://${window.location.host}/ws`,
+    );
+    socket.onopen = () => {
+      socket.send(JSON.stringify({ type: 'authenticate', accessToken }));
+    };
+    socket.onmessage = (event) => {
+      const message = JSON.parse(event.data as string) as RealtimeMessage;
+      if (message.type === 'authenticated') {
+        setRealtimeStatus('connected');
+        socket.send(JSON.stringify({ type: 'subscribe', tripIds: [trip.id] }));
+        return;
+      }
+      if (message.type === 'trip.snapshot' && message.snapshot) {
+        setTrip((current) =>
+          mergeRealtimeTrip(
+            current,
+            message.snapshot?.state,
+            message.snapshot?.version,
+          ),
+        );
+        return;
+      }
+      if (message.type === 'trip.event' && message.tripId === trip.id) {
+        const payload = message.payload;
+        if (!payload || typeof payload !== 'object') return;
+        const next = payload as {
+          state?: TripResponse['state'];
+          version?: number;
+        };
+        if (next.state && typeof next.version === 'number') {
+          setTrip((current) =>
+            mergeRealtimeTrip(current, next.state, next.version),
+          );
+        }
+        return;
+      }
+      if (message.type === 'error') setRealtimeStatus('error');
+    };
+    socket.onerror = () => setRealtimeStatus('error');
+    socket.onclose = () => {
+      if (!disposed) setRealtimeStatus('disconnected');
+    };
+    return () => {
+      disposed = true;
+      socket.close();
+    };
+  }, [accessToken, trip?.id]);
 
   if (!actor || !accessToken || !actor.roles.includes('CUSTOMER')) {
     return <AccessRequired onSignIn={onSignIn} />;
@@ -693,8 +770,10 @@ function RideRequestPage({
     if (quote) {
       setQuote(null);
       setTrip(null);
+      setDispatch(null);
       quoteKeyRef.current = crypto.randomUUID();
       tripKeyRef.current = crypto.randomUUID();
+      matchKeyRef.current = crypto.randomUUID();
     }
     setQuoteState({ state: 'submitting' });
     try {
@@ -729,10 +808,12 @@ function RideRequestPage({
   const editLocations = () => {
     setQuote(null);
     setTrip(null);
+    setDispatch(null);
     setQuoteState({ state: 'idle' });
     setTripState({ state: 'idle' });
     quoteKeyRef.current = crypto.randomUUID();
     tripKeyRef.current = crypto.randomUUID();
+    matchKeyRef.current = crypto.randomUUID();
   };
 
   const handleTrip = async () => {
@@ -748,6 +829,26 @@ function RideRequestPage({
         body: JSON.stringify({ fareQuoteId: quote.id }),
       });
       setTrip(result);
+      const matching = await request<DispatchMatchResponse>(
+        `/dispatch/trips/${result.id}/match`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+            'idempotency-key': matchKeyRef.current,
+          },
+        },
+      );
+      setDispatch(matching);
+      setTrip((current) =>
+        current
+          ? {
+              ...current,
+              state: matching.tripState,
+              version: matching.tripVersion,
+            }
+          : current,
+      );
       setTripState({ state: 'idle' });
     } catch (error) {
       setTripState({ state: 'error', message: (error as Error).message });
@@ -760,9 +861,9 @@ function RideRequestPage({
         <p className="eyebrow">Customer ride request</p>
         <h1>Plan one clear journey.</h1>
         <p>
-          This is the M2 demo boundary: manual locations, a deterministic
-          estimated Fare Quote, and a durable request. Routing, drivers,
-          matching, and payment arrive in later milestones.
+          This slice combines a deterministic Fare Quote, a durable Trip,
+          bounded matching, and a live status channel. Routing, payment, and
+          delivery remain outside the current demo boundary.
         </p>
         <button className="back-link" type="button" onClick={onAccount}>
           <ArrowLeft aria-hidden="true" size={18} /> Account
@@ -1040,11 +1141,12 @@ function RideRequestPage({
             </span>
             <p className="eyebrow">Request recorded</p>
             <h2>
-              Your ride request is <code>REQUESTED</code>.
+              Your ride request is <code>{trip.state}</code>.
             </h2>
-            <p>
-              Matching is not available in this milestone. Gove has stored your
-              request and will add dispatch in the next stage.
+            <p>{tripStateDescription(trip.state)}</p>
+            <p className={`realtime-status realtime-status--${realtimeStatus}`}>
+              <span aria-hidden="true" />
+              {realtimeStatusLabel(realtimeStatus)}
             </p>
             <dl className="quote-details">
               <div>
@@ -1055,7 +1157,17 @@ function RideRequestPage({
                 <dt>Estimated fare</dt>
                 <dd>{formatFare(trip.quotedTotalFareMinor, trip.currency)}</dd>
               </div>
+              <div>
+                <dt>Trip version</dt>
+                <dd>{trip.version}</dd>
+              </div>
             </dl>
+            {dispatch?.offer && trip.state === 'MATCHING' ? (
+              <p className="notice trip-offer-notice">
+                A Driver Offer is pending. The customer status will update as
+                soon as the Offer is accepted, rejected, or expires.
+              </p>
+            ) : null}
             <button
               className="secondary-link"
               type="button"
@@ -1112,6 +1224,48 @@ function formatFare(amount: number, currency: string): string {
 
 function formatDistance(meters: number): string {
   return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`;
+}
+
+function tripStateDescription(state: TripResponse['state']): string {
+  switch (state) {
+    case 'MATCHING':
+      return 'Gove is looking for a fresh, eligible Driver near the pickup point.';
+    case 'DRIVER_TO_PICKUP':
+      return 'A Driver accepted the Offer and is heading to the pickup point.';
+    case 'NO_DRIVER_AVAILABLE':
+      return 'No fresh eligible Driver was available in the current matching window.';
+    case 'COMPLETED':
+      return 'The Trip has been completed.';
+    default:
+      return 'Your request is stored and its state is delivered through the live channel.';
+  }
+}
+
+function mergeRealtimeTrip(
+  current: TripResponse | null,
+  state: TripResponse['state'] | undefined,
+  version: number | undefined,
+): TripResponse | null {
+  if (!current || !state || typeof version !== 'number') return current;
+  if (version < current.version) return current;
+  return { ...current, state, version };
+}
+
+function realtimeStatusLabel(
+  status: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error',
+): string {
+  switch (status) {
+    case 'connecting':
+      return 'Connecting to live Trip updates…';
+    case 'connected':
+      return 'Live Trip updates connected';
+    case 'disconnected':
+      return 'Live updates disconnected; refresh to reconnect';
+    case 'error':
+      return 'Live updates unavailable';
+    default:
+      return 'Live updates will start after the Trip is created';
+  }
 }
 
 function formatRemaining(expiresAt: string, now: number): string {
