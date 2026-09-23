@@ -23,9 +23,11 @@ Documentation records intended behavior and verified evidence. It must distingui
 | [Local development](operations/local-development.md)                    | Reproducible local environment                  | Tested locally |
 | [Vertical slice 01](implementation/vertical-slice-01.md)                | First implementation sequence                   | Accepted       |
 | [Vertical slice 02](implementation/vertical-slice-02.md)                | Quote, durable Ride Request, and customer PWA   | Tested locally |
+| [Vertical slice 03](implementation/vertical-slice-03.md)                | Dispatch, reservation, and acceptance boundary  | Tested locally |
 | [Product design system](design/design-system.md)                        | UI tokens and interaction rules                 | Designed       |
 | [Authentication API](api/authentication.md)                             | Auth/session and driver self-service contracts  | Tested locally |
 | [Ride request API](api/ride-requests.md)                                | M2 quote and Trip creation contracts            | Tested locally |
+| [Dispatch API](api/dispatch.md)                                         | M3 location, matching, offers, and acceptance   | Tested locally |
 | [Authentication boundary](security/authentication-and-authorization.md) | Implemented identity controls and limitations   | Tested locally |
 | [Identity and driver data](data/identity-driver-schema.md)              | M1 ownership, schema, and migration rules       | Implemented    |
 

@@ -40,6 +40,18 @@ export interface ApiErrorResponse {
 export const serviceTypes = ['MOTORBIKE_STANDARD', 'CAR_STANDARD'] as const;
 export type ServiceType = (typeof serviceTypes)[number];
 
+export const tripStates = [
+  'REQUESTED',
+  'MATCHING',
+  'DRIVER_TO_PICKUP',
+  'AT_PICKUP',
+  'IN_PROGRESS',
+  'COMPLETED',
+  'CANCELLED',
+  'NO_DRIVER_AVAILABLE',
+] as const;
+export type TripState = (typeof tripStates)[number];
+
 export interface RideLocation {
   label: string;
   latitude: number;
@@ -62,9 +74,45 @@ export interface TripResponse {
   id: string;
   fareQuoteId: string;
   serviceType: ServiceType;
-  state: 'REQUESTED';
-  version: 0;
+  state: TripState;
+  version: number;
   currency: string;
   quotedTotalFareMinor: number;
   createdAt: string;
+}
+
+export const driverWorkStates = [
+  'OFFLINE',
+  'AVAILABLE',
+  'RESERVED',
+  'TO_PICKUP',
+  'ON_TRIP',
+] as const;
+export type DriverWorkState = (typeof driverWorkStates)[number];
+
+export const tripOfferStates = [
+  'PENDING',
+  'ACCEPTED',
+  'REJECTED',
+  'EXPIRED',
+  'REVOKED',
+] as const;
+export type TripOfferState = (typeof tripOfferStates)[number];
+
+export interface TripOfferResponse {
+  id: string;
+  tripId: string;
+  driverId: string;
+  attemptNumber: number;
+  status: TripOfferState;
+  expiresAt: string;
+  tripState: TripState;
+  tripVersion: number;
+}
+
+export interface DispatchMatchResponse {
+  tripId: string;
+  tripState: TripState;
+  tripVersion: number;
+  offer: TripOfferResponse | null;
 }
