@@ -63,6 +63,8 @@ describe('Identity HTTP seam', () => {
       payload: { email, password },
     });
     expect(login.statusCode).toBe(200);
+    expect(login.headers['x-ratelimit-limit']).toBe('60');
+    expect(login.headers['x-ratelimit-remaining']).toBe('59');
     const authentication = login.json();
     const cookie = cookieValue(login.headers['set-cookie']);
     expect(cookie).toContain('gove_refresh=');

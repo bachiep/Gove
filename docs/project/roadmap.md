@@ -5,7 +5,7 @@ Last updated: 2026-09-24
 
 Each milestone exits only when its acceptance evidence is recorded. Dates are intentionally omitted until delivery capacity and the demo deadline are known.
 
-Current milestone: **M5 Completion and Settlement — implemented and tested locally.** M2, M3, and M4 remain complete locally. M5 adds Driver lifecycle commands, immutable-snapshot final fare calculation, idempotent payment simulation, terminal history, and customer/driver PWA surfaces. Broker-backed fanout, durable consumer checkpoints, payment reconciliation, hardening, deployment, and logistics remain.
+Current milestone: **M6 Hardening and Demo Deployment — in progress.** M0–M5 are implemented and tested locally. M5 adds Driver lifecycle commands, immutable-snapshot final fare calculation, idempotent payment simulation, terminal history, and customer/driver PWA surfaces. M6 now includes a process-local authentication rate limiter and a reproducible API load-generator baseline. Observability, representative closed-loop benchmarks, backup/restore, TLS, deployment, rollback, and logistics remain.
 
 | Milestone                        | Outcome                                                                                                      | Exit evidence                                                                                                             |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |

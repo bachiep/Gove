@@ -13,10 +13,11 @@ Last updated: 2026-09-24
 - Production configuration rejects the development default JWT and refresh-token secrets.
 - Authorization is enforced with a global authentication guard and route-level role guard. Driver routes derive ownership from the authenticated actor.
 - The API emits a correlation ID with responses and returns safe structured error bodies.
+- Authentication endpoints have a configurable process-local fixed-window rate limiter and expose standard limit headers.
 
 ## Explicit limitations
 
-- Login and registration have no durable distributed rate limiter yet. Deployment hardening must add a trusted reverse-proxy rate policy and test it.
+- The current rate limiter is process-local and is not a distributed source of truth. Multi-instance deployment must add a trusted shared or reverse-proxy rate policy and test it.
 - Accounts have no email verification, password reset, MFA, or operator provisioning workflow yet.
 - The current origin check is an additional browser control, not a replacement for CSRF analysis when cross-site requirements change.
 - Authorization tests cover the implemented self-service boundary. Customer trip ownership and operator audit permissions belong to later milestones.

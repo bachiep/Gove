@@ -23,6 +23,7 @@ No host PostgreSQL, PostGIS, Redis, or reverse proxy installation is required.
 | `npm run dev`                          | Run API and PWA in watch mode                                   |
 | `npm run check`                        | Run formatting check, lint, typecheck, unit, and contract tests |
 | `npm run build`                        | Produce deployable application artifacts                        |
+| `npm run load:api`                     | Run the bounded local API load baseline                         |
 
 ## Local ports
 
@@ -38,6 +39,8 @@ No host PostgreSQL, PostGIS, Redis, or reverse proxy installation is required.
 `.env.example` contains names and safe placeholders. `.env` is ignored. Startup validates every required variable and exits with a clear error when configuration is missing or malformed.
 
 The PWA proxies `/api` to the API during development. API documentation is available at `http://127.0.0.1:3000/api/docs`; liveness and dependency-aware readiness are exposed under `/api/v1/health`.
+
+Authentication endpoints use a process-local rate limiter configured by `AUTH_RATE_LIMIT_WINDOW_SECONDS` and `AUTH_RATE_LIMIT_MAX`. It is suitable for local and single-process demonstrations only; a multi-instance deployment needs enforcement at a trusted shared boundary.
 
 ## Data safety
 

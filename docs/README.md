@@ -21,6 +21,7 @@ Documentation records intended behavior and verified evidence. It must distingui
 | [Failure model](architecture/failure-model.md)                          | Dependency failures and expected behavior         | Designed       |
 | [Testing strategy](testing/strategy.md)                                 | Test levels and evidence gates                    | Accepted       |
 | [Local development](operations/local-development.md)                    | Reproducible local environment                    | Tested locally |
+| [API performance baseline](performance/baseline-2026-09-24.md)          | Reproducible local load measurement               | Measured       |
 | [Vertical slice 01](implementation/vertical-slice-01.md)                | First implementation sequence                     | Accepted       |
 | [Vertical slice 02](implementation/vertical-slice-02.md)                | Quote, durable Ride Request, and customer PWA     | Tested locally |
 | [Vertical slice 03](implementation/vertical-slice-03.md)                | Dispatch, reservation, and acceptance boundary    | Tested locally |

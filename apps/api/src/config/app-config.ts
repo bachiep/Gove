@@ -26,6 +26,13 @@ const environmentSchema = z.object({
   AUTH_JWT_SECRET: z.string().min(32).default(localJwtSecret),
   AUTH_REFRESH_PEPPER: z.string().min(32).default(localRefreshPepper),
   AUTH_REFRESH_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(14),
+  AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(3_600)
+    .default(60),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(10_000).default(60),
 });
 
 export type AppConfig = z.infer<typeof environmentSchema>;
