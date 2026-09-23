@@ -1,0 +1,32 @@
+{
+  "name": "@gove/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "db:migrate": "tsx src/database/migrate.ts",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/helmet": "13.1.1",
+    "@fastify/static": "10.1.4",
+    "@gove/contracts": "0.1.0",
+    "@nestjs/common": "12.1.0",
+    "@nestjs/core": "12.1.0",
+    "@nestjs/platform-fastify": "12.1.0",
+    "@nestjs/swagger": "12.0.2",
+    "fastify": "5.12.5",
+    "pg": "8.23.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "12.1.0",
+    "@types/pg": "8.23.1"
+  }
+}

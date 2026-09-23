@@ -7,16 +7,16 @@ Correctness evidence is organized around module interfaces and business invarian
 
 ## Test levels
 
-| Level | Purpose | Representative evidence |
-| --- | --- | --- |
-| Unit | Pure state machines, pricing, eligibility, ranking, authorization policy, and idempotency fingerprint | Fast deterministic Vitest suites |
-| Integration | PostgreSQL/PostGIS transactions, migrations, spatial queries, constraints, outbox, and optional Redis TTL behavior | Real container dependencies; no persistence mocks |
-| Contract | REST/OpenAPI, WebSocket envelope, and durable event compatibility | Schema validation and compatibility checks |
-| End-to-end | Customer, Driver, and Operator behavior across HTTP, WebSocket, database, and UI | Isolated seeded environment and browser tests |
-| Concurrency | Races around reservation, acceptance, cancellation, completion, payment, and event delivery | Repeated parallel commands plus database invariant queries |
-| Resilience | Dependency outage, restart, reconnect, delayed/duplicate messages, and stale location | Controlled fault scenarios with recovery assertions |
-| Security | Authentication, ownership, role, rate, input, secret, and log-redaction behavior | Negative tests, scans, and public-port review |
-| Performance | Measured demo workload and regression comparison | Raw results plus summarized percentiles and resources |
+| Level       | Purpose                                                                                                            | Representative evidence                                    |
+| ----------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| Unit        | Pure state machines, pricing, eligibility, ranking, authorization policy, and idempotency fingerprint              | Fast deterministic Vitest suites                           |
+| Integration | PostgreSQL/PostGIS transactions, migrations, spatial queries, constraints, outbox, and optional Redis TTL behavior | Real container dependencies; no persistence mocks          |
+| Contract    | REST/OpenAPI, WebSocket envelope, and durable event compatibility                                                  | Schema validation and compatibility checks                 |
+| End-to-end  | Customer, Driver, and Operator behavior across HTTP, WebSocket, database, and UI                                   | Isolated seeded environment and browser tests              |
+| Concurrency | Races around reservation, acceptance, cancellation, completion, payment, and event delivery                        | Repeated parallel commands plus database invariant queries |
+| Resilience  | Dependency outage, restart, reconnect, delayed/duplicate messages, and stale location                              | Controlled fault scenarios with recovery assertions        |
+| Security    | Authentication, ownership, role, rate, input, secret, and log-redaction behavior                                   | Negative tests, scans, and public-port review              |
+| Performance | Measured demo workload and regression comparison                                                                   | Raw results plus summarized percentiles and resources      |
 
 ## Mandatory race scenarios
 

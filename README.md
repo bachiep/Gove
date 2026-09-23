@@ -4,7 +4,7 @@ Gove is an academic real-time ride-hailing and logistics platform. The project i
 
 ## Current status
 
-**Foundation / Designed.** The repository and technical baseline exist. Application features are not yet implemented, tested, verified, or deployed.
+**Foundation / Tested locally.** The monorepo, API and PWA shells, PostgreSQL/PostGIS environment, migration runner, health checks, CI workflow, and Trip lifecycle domain model are implemented. Formatting, linting, type checking, the automated test suite, production builds, migrations, readiness checks, and responsive browser rendering have been exercised locally. The first end-to-end ride flow is not yet implemented or deployed.
 
 ## Architecture baseline
 

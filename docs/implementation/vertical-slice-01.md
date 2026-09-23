@@ -13,7 +13,7 @@ Prove the architecture through one executable Customer-to-Driver ride flow rathe
 2. **Identity and demo actors**: registration/login, role guards, ownership policy, Customer/Driver profiles, Vehicle eligibility, synthetic seeds.
 3. **Trip and pricing core**: deterministic Fare Quote, idempotent Trip creation, lifecycle module, transition audit, OpenAPI contract.
 4. **Location and dispatch**: validated Latest Location, fresh PostGIS candidate query, ranking, exclusive Driver Reservation, sequential Trip Offer, expiry/rejection/no-driver behavior.
-5. **Acceptance transaction**: atomically accept one offer, assign one Driver, move Driver to `ON_TRIP`, increment Trip version, and write outbox events.
+5. **Acceptance transaction**: atomically accept one offer, assign one Driver, move Driver to `TO_PICKUP`, increment Trip version, and write outbox events.
 6. **Real-time projection**: authenticated WebSocket subscriptions, semantic Trip events, throttled assigned-Driver location, reconnect snapshot, stale-data UI.
 7. **Completion and settlement**: arrival/start/complete commands, final Fare, simulator Payment Attempt, history and receipt.
 8. **Verification**: race suites, E2E browser flow, fault tests, security checks, benchmark, deploy/restore/rollback rehearsal.
@@ -21,7 +21,7 @@ Prove the architecture through one executable Customer-to-Driver ride flow rathe
 ## Interface baseline
 
 - HTTP prefix: `/api/v1`.
-- Health: `/health/live` and `/health/ready`.
+- Health: `/api/v1/health/live` and `/api/v1/health/ready`.
 - OpenAPI: generated from the running API and checked for compatibility.
 - WebSocket path: `/realtime`; authenticated before subscription.
 - Mutating retryable commands require `Idempotency-Key`.

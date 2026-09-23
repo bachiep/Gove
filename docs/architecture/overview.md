@@ -27,16 +27,16 @@ Customer / Driver / Operator PWA
 
 Each module owns a small interface and hides persistence, invariants, retries, and error mapping behind it. Callers test through the same seam they use in production.
 
-| Module | Interface responsibility | Hidden implementation |
-| --- | --- | --- |
-| Identity | Authenticate, authorize, resolve actor | Password hashing, token rotation, credential persistence |
-| Driver | Manage profile, Vehicle, and eligibility | Approval rules and ownership constraints |
-| Location | Accept Latest Location and query fresh nearby Drivers | Validation, PostGIS query, optional Redis geo projection |
-| Pricing | Create and validate Fare Quotes; finalize Fare | Rule versions, rounding, bounded surge policy |
-| Trip | Create Trip and execute lifecycle commands | Aggregate versioning, transition log, cancellation rules |
-| Dispatch | Own Dispatch Request, Driver Work State, Reservation, Offer, and Assignment | Candidate ranking, TTL, transactional contention |
-| Payment | Authorize/capture through a provider seam | Idempotency, unknown outcome, reconciliation records |
-| Notification | Deliver semantic user notifications | WebSocket routing and later delivery adapters |
+| Module       | Interface responsibility                                                    | Hidden implementation                                    |
+| ------------ | --------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Identity     | Authenticate, authorize, resolve actor                                      | Password hashing, token rotation, credential persistence |
+| Driver       | Manage profile, Vehicle, and eligibility                                    | Approval rules and ownership constraints                 |
+| Location     | Accept Latest Location and query fresh nearby Drivers                       | Validation, PostGIS query, optional Redis geo projection |
+| Pricing      | Create and validate Fare Quotes; finalize Fare                              | Rule versions, rounding, bounded surge policy            |
+| Trip         | Create Trip and execute lifecycle commands                                  | Aggregate versioning, transition log, cancellation rules |
+| Dispatch     | Own Dispatch Request, Driver Work State, Reservation, Offer, and Assignment | Candidate ranking, TTL, transactional contention         |
+| Payment      | Authorize/capture through a provider seam                                   | Idempotency, unknown outcome, reconciliation records     |
+| Notification | Deliver semantic user notifications                                         | WebSocket routing and later delivery adapters            |
 
 Identity and IDs are shared kernel types; business entities are not shared mutable models. Delivery will become a separate context and may reuse only stable value types and external seams.
 

@@ -11,19 +11,19 @@ The PWA is a demo constraint, not a claim of production-grade background locatio
 
 ## Semantic colors
 
-| Token | Light | Dark | Use |
-| --- | --- | --- | --- |
-| `--surface-canvas` | `#F8FAFC` | `#0F172A` | Page background |
-| `--surface-card` | `#FFFFFF` | `#172033` | Cards and sheets |
-| `--text-primary` | `#0F172A` | `#F8FAFC` | Primary copy |
-| `--text-muted` | `#475569` | `#CBD5E1` | Secondary copy with AA contrast |
-| `--brand-primary` | `#1D4ED8` | `#60A5FA` | Primary navigation and action |
-| `--brand-accent` | `#C2410C` | `#FB923C` | Time-sensitive emphasis, not generic danger |
-| `--state-success` | `#15803D` | `#4ADE80` | Confirmed success |
-| `--state-warning` | `#A16207` | `#FACC15` | Stale or attention state |
-| `--state-danger` | `#B91C1C` | `#F87171` | Destructive or failed state |
-| `--border-default` | `#CBD5E1` | `#475569` | Structure and input boundaries |
-| `--focus-ring` | `#1D4ED8` | `#93C5FD` | Keyboard focus |
+| Token              | Light     | Dark      | Use                                         |
+| ------------------ | --------- | --------- | ------------------------------------------- |
+| `--surface-canvas` | `#F8FAFC` | `#0F172A` | Page background                             |
+| `--surface-card`   | `#FFFFFF` | `#172033` | Cards and sheets                            |
+| `--text-primary`   | `#0F172A` | `#F8FAFC` | Primary copy                                |
+| `--text-muted`     | `#475569` | `#CBD5E1` | Secondary copy with AA contrast             |
+| `--brand-primary`  | `#1D4ED8` | `#60A5FA` | Primary navigation and action               |
+| `--brand-accent`   | `#C2410C` | `#FB923C` | Time-sensitive emphasis, not generic danger |
+| `--state-success`  | `#15803D` | `#4ADE80` | Confirmed success                           |
+| `--state-warning`  | `#A16207` | `#FACC15` | Stale or attention state                    |
+| `--state-danger`   | `#B91C1C` | `#F87171` | Destructive or failed state                 |
+| `--border-default` | `#CBD5E1` | `#475569` | Structure and input boundaries              |
+| `--focus-ring`     | `#1D4ED8` | `#93C5FD` | Keyboard focus                              |
 
 Colors never communicate state alone. Icons, labels, and text accompany every status.
 

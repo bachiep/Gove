@@ -14,3 +14,12 @@ Thumbs.db
 
 .idea/
 .vscode/
+
+.agy-bridge-artifacts/
+
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+*.tsbuildinfo

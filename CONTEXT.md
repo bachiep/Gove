@@ -27,7 +27,7 @@ A Customer's intent to travel from a Pickup to a Dropoff under a selected Servic
 _Avoid_: Order, booking, Trip before creation succeeds
 
 **Trip**:
-The durable ride aggregate created from an accepted Ride Request and tracked through its lifecycle.
+The durable ride aggregate created from a validated Ride Request and tracked through its lifecycle.
 _Avoid_: Order, Job, Ride when referring to persisted state
 
 **Pickup**:
