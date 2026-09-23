@@ -1,6 +1,6 @@
 # Dispatch, Location, and Driver Acceptance API
 
-Status: Partially implemented and tested locally
+Status: Tested locally
 Last updated: 2026-09-24
 
 These endpoints implement the M3 correctness boundary in the modular monolith. PostgreSQL owns the latest location projection, Driver Work State, Reservation, Trip Offer, and Trip transition. The M4 WebSocket gateway now delivers rebuildable Trip snapshots and committed outbox events; it does not own any of these business states.
@@ -62,9 +62,24 @@ pure expiry policy, releases the Driver exactly once, writes
 candidate exists, the Trip moves to `NO_DRIVER_AVAILABLE`. The worker is
 best-effort process-local and the database transaction remains authoritative.
 
+## Driver console and completion
+
+`GET /api/v1/dispatch/offers/me` lists the current Driver's pending Offers.
+`GET /api/v1/dispatch/trips/current` returns the active Assignment as a
+`TripDetailResponse`, and `GET /api/v1/drivers/me/work-state` returns the
+current Driver Work State.
+
+The assigned Driver advances the lifecycle with the arrival, start, and
+completion commands documented in [completion and settlement](completion-and-settlement.md).
+Each command verifies the active Assignment, expected Trip state, expected
+Driver Work State, and idempotency receipt in one transaction.
+
 ## Current limitations
 
 - Reassignment is currently one bounded synchronous retry; a general retry policy and explicit Driver rejection reason are not implemented.
 - Driver approval is still an operator/database setup concern; there is no operator approval API.
-- The customer PWA displays the current Trip state, Trip version, and WebSocket connection status. A Driver Offer is shown as pending when the matching response includes one; a full Driver-facing Offer inbox is not implemented.
+- The customer PWA displays the current Trip state, Trip version, completion
+  metering, final fare, and WebSocket connection status. The Driver PWA has a
+  bounded foreground console for Offers and lifecycle commands; it does not
+  implement background location tracking.
 - Freshness, offer TTL, radius, and candidate limits are local policy constants; no capacity or latency claim is made.

@@ -5,6 +5,7 @@ import type {
   DispatchMatchResponse,
   DispatchOfferRejectionResponse,
   DriverWorkState,
+  TripDetailResponse,
   TripOfferResponse,
   TripState,
 } from '@gove/contracts';
@@ -14,6 +15,10 @@ import {
   DatabaseService,
   type DatabaseExecutor,
 } from '../database/database.service.js';
+import {
+  calculateFinalFare,
+  type FarePricingRuleSnapshot,
+} from '../pricing/fare-quote.js';
 import { evaluateDispatchExpiry } from './dispatch-expiry-policy.js';
 import { rankEligibleDriverCandidates } from './dispatch-ranking.js';
 
@@ -69,6 +74,28 @@ interface DueOfferRow extends QueryResultRow {
   work_state: DriverWorkState | null;
 }
 
+interface AssignedTripRow extends QueryResultRow {
+  id: string;
+  fare_quote_id: string;
+  customer_user_id: string;
+  service_type_code: 'MOTORBIKE_STANDARD' | 'CAR_STANDARD';
+  state: TripState;
+  version: number;
+  currency: string;
+  quoted_total_fare_minor: string;
+  quote_snapshot: unknown;
+  applied_surge_multiplier_bps: number;
+  actual_distance_meters: number | null;
+  actual_duration_seconds: number | null;
+  final_fare_minor: string | null;
+  created_at: Date;
+  completed_at: Date | null;
+  driver_user_id: string;
+  assignment_id: string;
+  assignment_status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'RELEASED';
+  work_state: DriverWorkState;
+}
+
 export type DispatchCommandErrorCode =
   | 'TRIP_NOT_FOUND'
   | 'TRIP_NOT_MATCHABLE'
@@ -78,6 +105,10 @@ export type DispatchCommandErrorCode =
   | 'OFFER_NOT_FOR_DRIVER'
   | 'OFFER_EXPIRED'
   | 'OFFER_ALREADY_RESOLVED'
+  | 'TRIP_NOT_ASSIGNED_TO_DRIVER'
+  | 'TRIP_INVALID_STATE'
+  | 'METERING_INVALID'
+  | 'PRICING_SNAPSHOT_INVALID'
   | 'IDEMPOTENCY_KEY_REUSED';
 
 export class DispatchCommandError extends Error {
@@ -103,6 +134,9 @@ type RejectResult =
       rejected: false;
       code: 'OFFER_EXPIRED' | 'OFFER_ALREADY_RESOLVED';
     };
+
+export type AssignedTripAction =
+  'ARRIVE_AT_PICKUP' | 'START_TRIP' | 'COMPLETE_TRIP';
 
 @Injectable()
 export class DispatchRepository {
@@ -170,6 +204,60 @@ export class DispatchRepository {
           );
       return toWorkStateResponse(result.rows[0] as WorkStateRow);
     });
+  }
+
+  async getWorkState(driverUserId: string): Promise<WorkStateResponse> {
+    const result = await this.database.query<WorkStateRow>(
+      `SELECT driver_user_id, work_state, state_version, updated_at
+       FROM dispatch.driver_work_states
+       WHERE driver_user_id = $1`,
+      [driverUserId],
+    );
+    const row = result.rows[0];
+    if (row) return toWorkStateResponse(row);
+    return {
+      driverId: driverUserId,
+      state: 'OFFLINE',
+      stateVersion: 0,
+      updatedAt: new Date(0).toISOString(),
+    };
+  }
+
+  async listPendingOffers(driverUserId: string): Promise<TripOfferResponse[]> {
+    const result = await this.database.query<OfferRow>(
+      `SELECT o.id, o.trip_id, o.driver_user_id, o.attempt_number, o.status,
+              o.expires_at, t.state AS trip_state, t.version AS trip_version,
+              o.accepted_by_user_id, o.acceptance_idempotency_key
+       FROM dispatch.trip_offers o
+       JOIN trip.trips t ON t.id = o.trip_id
+       WHERE o.driver_user_id = $1 AND o.status = 'PENDING'
+       ORDER BY o.offered_at ASC, o.id ASC`,
+      [driverUserId],
+    );
+    return result.rows.map(toOfferResponse);
+  }
+
+  async findCurrentAssignedTrip(
+    driverUserId: string,
+  ): Promise<TripDetailResponse | null> {
+    const result = await this.database.query<AssignedTripRow>(
+      `SELECT t.id, t.fare_quote_id, t.customer_user_id,
+              t.service_type_code, t.state, t.version, t.currency,
+              t.quoted_total_fare_minor, t.quote_snapshot,
+              t.applied_surge_multiplier_bps, t.actual_distance_meters,
+              t.actual_duration_seconds, t.final_fare_minor,
+              t.created_at, t.completed_at,
+              a.id AS assignment_id, a.driver_user_id, a.status AS assignment_status,
+              ws.work_state
+       FROM dispatch.assignments a
+       JOIN trip.trips t ON t.id = a.trip_id
+       JOIN dispatch.driver_work_states ws ON ws.driver_user_id = a.driver_user_id
+       WHERE a.driver_user_id = $1 AND a.status = 'ACTIVE'
+       LIMIT 1`,
+      [driverUserId],
+    );
+    const row = result.rows[0];
+    return row ? toAssignedTripResponse(row) : null;
   }
 
   async startMatching(input: {
@@ -703,7 +791,7 @@ export class DispatchRepository {
          WHERE id = $1 AND status = 'ACTIVE'`,
         [reservation.id, input.driverUserId],
       );
-      await executor.query(
+      const workStateUpdate = await executor.query(
         `UPDATE dispatch.driver_work_states
          SET work_state = 'TO_PICKUP', current_trip_id = $2,
              state_version = state_version + 1,
@@ -711,6 +799,15 @@ export class DispatchRepository {
          WHERE driver_user_id = $1 AND work_state = 'RESERVED'
            AND current_trip_id = $2`,
         [input.driverUserId, offer.trip_id],
+      );
+      if (workStateUpdate.rowCount !== 1) {
+        throw new DispatchCommandError('DRIVER_WORK_STATE_CONFLICT');
+      }
+      await executor.query(
+        `INSERT INTO dispatch.assignments (
+           id, trip_id, offer_id, driver_user_id, status, accepted_at
+         ) VALUES ($1, $2, $3, $4, 'ACTIVE', now())`,
+        [randomUUID(), offer.trip_id, input.offerId, input.driverUserId],
       );
       await executor.query(
         `UPDATE trip.trips
@@ -752,6 +849,350 @@ export class DispatchRepository {
       };
     });
   }
+
+  async transitionAssignedTrip(input: {
+    driverUserId: string;
+    tripId: string;
+    action: AssignedTripAction;
+    idempotencyKey: string;
+    requestFingerprint: Buffer;
+    correlationId: string;
+    actualDistanceMeters?: number;
+    actualDurationSeconds?: number;
+  }): Promise<TripDetailResponse> {
+    return this.database.transaction(async (executor) => {
+      const operation = lifecycleOperation(input.action);
+      await executor.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `${input.driverUserId}:${operation}:${input.idempotencyKey}`,
+      ]);
+
+      const receiptResult = await executor.query<{
+        request_fingerprint: Buffer;
+        response_body: TripDetailResponse;
+      }>(
+        `SELECT request_fingerprint, response_body
+         FROM trip.command_receipts
+         WHERE actor_user_id = $1 AND operation = $2 AND idempotency_key = $3
+         FOR UPDATE`,
+        [input.driverUserId, operation, input.idempotencyKey],
+      );
+      const receipt = receiptResult.rows[0];
+      if (receipt) {
+        if (
+          !sameDigest(receipt.request_fingerprint, input.requestFingerprint)
+        ) {
+          throw new DispatchCommandError('IDEMPOTENCY_KEY_REUSED');
+        }
+        return receipt.response_body;
+      }
+
+      const assignedResult = await executor.query<AssignedTripRow>(
+        `SELECT t.id, t.fare_quote_id, t.customer_user_id,
+                t.service_type_code, t.state, t.version, t.currency,
+                t.quoted_total_fare_minor, t.quote_snapshot,
+                t.applied_surge_multiplier_bps, t.actual_distance_meters,
+                t.actual_duration_seconds, t.final_fare_minor,
+                t.created_at, t.completed_at,
+                a.id AS assignment_id, a.driver_user_id, a.status AS assignment_status,
+                ws.work_state
+         FROM trip.trips t
+         JOIN dispatch.assignments a ON a.trip_id = t.id
+         JOIN dispatch.driver_work_states ws ON ws.driver_user_id = a.driver_user_id
+         WHERE t.id = $1 AND a.driver_user_id = $2
+         FOR UPDATE OF t, a, ws`,
+        [input.tripId, input.driverUserId],
+      );
+      const assigned = assignedResult.rows[0];
+      if (!assigned) {
+        const tripExists = await executor.query<{ id: string }>(
+          'SELECT id FROM trip.trips WHERE id = $1',
+          [input.tripId],
+        );
+        throw new DispatchCommandError(
+          tripExists.rows[0] ? 'TRIP_NOT_ASSIGNED_TO_DRIVER' : 'TRIP_NOT_FOUND',
+        );
+      }
+      if (assigned.assignment_status !== 'ACTIVE') {
+        throw new DispatchCommandError('TRIP_INVALID_STATE');
+      }
+
+      const policy = assignedTripTransitionPolicy(input.action);
+      if (
+        assigned.state !== policy.fromState ||
+        assigned.work_state !== policy.workStateFrom
+      ) {
+        throw new DispatchCommandError('TRIP_INVALID_STATE');
+      }
+
+      let finalFareMinor: number | null = null;
+      if (input.action === 'COMPLETE_TRIP') {
+        if (
+          !isPositiveSafeInteger(input.actualDistanceMeters) ||
+          !isPositiveSafeInteger(input.actualDurationSeconds)
+        ) {
+          throw new DispatchCommandError('METERING_INVALID');
+        }
+        try {
+          finalFareMinor = calculateFinalFare(
+            {
+              distanceMeters: input.actualDistanceMeters,
+              durationSeconds: input.actualDurationSeconds,
+              appliedSurgeMultiplierBps: assigned.applied_surge_multiplier_bps,
+            },
+            toFarePricingRuleSnapshot(assigned.quote_snapshot),
+          ).totalFareMinor;
+        } catch (error) {
+          if (error instanceof DispatchCommandError) throw error;
+          throw new DispatchCommandError('PRICING_SNAPSHOT_INVALID');
+        }
+      }
+
+      const nextVersion = assigned.version + 1;
+      let completedAt = assigned.completed_at;
+      if (input.action === 'COMPLETE_TRIP') {
+        const tripUpdate = await executor.query<{ completed_at: Date }>(
+          `UPDATE trip.trips
+           SET state = $2, version = $3, updated_at = now(),
+               actual_distance_meters = $4,
+               actual_duration_seconds = $5,
+               final_fare_minor = $6,
+               completed_at = now()
+           WHERE id = $1 AND state = $7 AND version = $8
+           RETURNING completed_at`,
+          [
+            assigned.id,
+            policy.toState,
+            nextVersion,
+            input.actualDistanceMeters,
+            input.actualDurationSeconds,
+            finalFareMinor,
+            policy.fromState,
+            assigned.version,
+          ],
+        );
+        if (!tripUpdate.rows[0]) {
+          throw new DispatchCommandError('TRIP_INVALID_STATE');
+        }
+        completedAt = tripUpdate.rows[0].completed_at;
+      } else {
+        const tripUpdate = await executor.query<{ id: string }>(
+          `UPDATE trip.trips
+           SET state = $2, version = $3, updated_at = now()
+           WHERE id = $1 AND state = $4 AND version = $5
+           RETURNING id`,
+          [
+            assigned.id,
+            policy.toState,
+            nextVersion,
+            policy.fromState,
+            assigned.version,
+          ],
+        );
+        if (!tripUpdate.rows[0]) {
+          throw new DispatchCommandError('TRIP_INVALID_STATE');
+        }
+      }
+
+      if (input.action === 'START_TRIP') {
+        const assignmentUpdate = await executor.query(
+          `UPDATE dispatch.assignments
+           SET started_at = COALESCE(started_at, now())
+           WHERE id = $1 AND status = 'ACTIVE'`,
+          [assigned.assignment_id],
+        );
+        if (assignmentUpdate.rowCount !== 1) {
+          throw new DispatchCommandError('TRIP_INVALID_STATE');
+        }
+      }
+      if (input.action === 'COMPLETE_TRIP') {
+        const assignmentUpdate = await executor.query(
+          `UPDATE dispatch.assignments
+           SET status = 'COMPLETED', completed_at = COALESCE(completed_at, now())
+           WHERE id = $1 AND status = 'ACTIVE'`,
+          [assigned.assignment_id],
+        );
+        if (assignmentUpdate.rowCount !== 1) {
+          throw new DispatchCommandError('TRIP_INVALID_STATE');
+        }
+      }
+
+      const workStateUpdate = await executor.query(
+        `UPDATE dispatch.driver_work_states
+         SET work_state = $2, current_trip_id = $3,
+             state_version = state_version + 1,
+             state_changed_at = now(), updated_at = now()
+         WHERE driver_user_id = $1 AND work_state = $4
+           AND current_trip_id = $5`,
+        [
+          input.driverUserId,
+          policy.workStateTo,
+          input.action === 'COMPLETE_TRIP' ? null : assigned.id,
+          policy.workStateFrom,
+          assigned.id,
+        ],
+      );
+      if (workStateUpdate.rowCount !== 1) {
+        throw new DispatchCommandError('DRIVER_WORK_STATE_CONFLICT');
+      }
+
+      await appendTripTransition(executor, {
+        tripId: assigned.id,
+        actorUserId: input.driverUserId,
+        command: policy.command,
+        fromState: policy.fromState,
+        toState: policy.toState,
+        fromVersion: assigned.version,
+        toVersion: nextVersion,
+        correlationId: input.correlationId,
+      });
+      await appendTripOutbox(
+        executor,
+        assigned.id,
+        nextVersion,
+        policy.eventType,
+        {
+          tripId: assigned.id,
+          driverUserId: input.driverUserId,
+          state: policy.toState,
+          version: nextVersion,
+          ...(input.action === 'COMPLETE_TRIP'
+            ? {
+                actualDistanceMeters: input.actualDistanceMeters,
+                actualDurationSeconds: input.actualDurationSeconds,
+                finalFareMinor,
+              }
+            : {}),
+        },
+      );
+
+      const response: TripDetailResponse = {
+        id: assigned.id,
+        fareQuoteId: assigned.fare_quote_id,
+        serviceType: assigned.service_type_code,
+        state: policy.toState,
+        version: nextVersion,
+        currency: assigned.currency,
+        quotedTotalFareMinor: safeInteger(
+          assigned.quoted_total_fare_minor,
+          'quoted_total_fare_minor',
+        ),
+        createdAt: assigned.created_at.toISOString(),
+        driverId: assigned.driver_user_id,
+        actualDistanceMeters:
+          input.action === 'COMPLETE_TRIP'
+            ? (input.actualDistanceMeters ?? null)
+            : assigned.actual_distance_meters,
+        actualDurationSeconds:
+          input.action === 'COMPLETE_TRIP'
+            ? (input.actualDurationSeconds ?? null)
+            : assigned.actual_duration_seconds,
+        finalFareMinor:
+          input.action === 'COMPLETE_TRIP'
+            ? finalFareMinor
+            : assigned.final_fare_minor === null
+              ? null
+              : safeInteger(assigned.final_fare_minor, 'final_fare_minor'),
+        completedAt:
+          input.action === 'COMPLETE_TRIP'
+            ? (completedAt?.toISOString() ?? null)
+            : (assigned.completed_at?.toISOString() ?? null),
+      };
+      await persistLifecycleReceipt(executor, {
+        actorUserId: input.driverUserId,
+        operation,
+        idempotencyKey: input.idempotencyKey,
+        requestFingerprint: input.requestFingerprint,
+        response,
+        tripId: assigned.id,
+      });
+      return response;
+    });
+  }
+}
+
+interface AssignedTripTransitionPolicy {
+  fromState: TripState;
+  toState: TripState;
+  workStateFrom: DriverWorkState;
+  workStateTo: DriverWorkState;
+  command: string;
+  eventType: string;
+}
+
+function lifecycleOperation(action: AssignedTripAction): string {
+  return `DRIVER_${action}`;
+}
+
+function assignedTripTransitionPolicy(
+  action: AssignedTripAction,
+): AssignedTripTransitionPolicy {
+  switch (action) {
+    case 'ARRIVE_AT_PICKUP':
+      return {
+        fromState: 'DRIVER_TO_PICKUP',
+        toState: 'AT_PICKUP',
+        workStateFrom: 'TO_PICKUP',
+        workStateTo: 'TO_PICKUP',
+        command: 'MARK_AT_PICKUP',
+        eventType: 'trip.driver.arrived',
+      };
+    case 'START_TRIP':
+      return {
+        fromState: 'AT_PICKUP',
+        toState: 'IN_PROGRESS',
+        workStateFrom: 'TO_PICKUP',
+        workStateTo: 'ON_TRIP',
+        command: 'START_TRIP',
+        eventType: 'trip.started',
+      };
+    case 'COMPLETE_TRIP':
+      return {
+        fromState: 'IN_PROGRESS',
+        toState: 'COMPLETED',
+        workStateFrom: 'ON_TRIP',
+        workStateTo: 'AVAILABLE',
+        command: 'COMPLETE_TRIP',
+        eventType: 'trip.completed',
+      };
+  }
+}
+
+function isPositiveSafeInteger(value: number | undefined): value is number {
+  return value !== undefined && Number.isSafeInteger(value) && value > 0;
+}
+
+function toFarePricingRuleSnapshot(value: unknown): FarePricingRuleSnapshot {
+  if (!value || typeof value !== 'object') {
+    throw new DispatchCommandError('PRICING_SNAPSHOT_INVALID');
+  }
+  const snapshot = value as Record<string, unknown>;
+  const requiredString = (field: string): string => {
+    const fieldValue = snapshot[field];
+    if (typeof fieldValue !== 'string' || fieldValue.trim() === '') {
+      throw new DispatchCommandError('PRICING_SNAPSHOT_INVALID');
+    }
+    return fieldValue;
+  };
+  const requiredInteger = (field: string): number => {
+    const fieldValue = snapshot[field];
+    if (!Number.isSafeInteger(fieldValue) || (fieldValue as number) < 0) {
+      throw new DispatchCommandError('PRICING_SNAPSHOT_INVALID');
+    }
+    return fieldValue as number;
+  };
+  return {
+    version: requiredString('version'),
+    currency: requiredString('currency'),
+    serviceType: requiredString('serviceType'),
+    baseFareMinor: requiredInteger('baseFareMinor'),
+    distanceRateMinorPerKilometer: requiredInteger(
+      'distanceRateMinorPerKilometer',
+    ),
+    durationRateMinorPerMinute: requiredInteger('durationRateMinorPerMinute'),
+    serviceMultiplierBps: requiredInteger('serviceMultiplierBps'),
+    minimumSurgeMultiplierBps: requiredInteger('minimumSurgeMultiplierBps'),
+    maximumSurgeMultiplierBps: requiredInteger('maximumSurgeMultiplierBps'),
+  };
 }
 
 async function reserveNextOffer(
@@ -915,6 +1356,14 @@ function sameDigest(left: Buffer, right: Buffer): boolean {
   return left.length === right.length && left.equals(right);
 }
 
+function safeInteger(value: string, column: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`${column} is not a non-negative safe integer`);
+  }
+  return parsed;
+}
+
 function toOfferResponse(row: OfferRow): TripOfferResponse {
   return {
     id: row.id,
@@ -925,6 +1374,30 @@ function toOfferResponse(row: OfferRow): TripOfferResponse {
     expiresAt: row.expires_at.toISOString(),
     tripState: row.trip_state,
     tripVersion: row.trip_version,
+  };
+}
+
+function toAssignedTripResponse(row: AssignedTripRow): TripDetailResponse {
+  return {
+    id: row.id,
+    fareQuoteId: row.fare_quote_id,
+    serviceType: row.service_type_code,
+    state: row.state,
+    version: row.version,
+    currency: row.currency,
+    quotedTotalFareMinor: safeInteger(
+      row.quoted_total_fare_minor,
+      'quoted_total_fare_minor',
+    ),
+    createdAt: row.created_at.toISOString(),
+    driverId: row.driver_user_id,
+    actualDistanceMeters: row.actual_distance_meters,
+    actualDurationSeconds: row.actual_duration_seconds,
+    finalFareMinor:
+      row.final_fare_minor === null
+        ? null
+        : safeInteger(row.final_fare_minor, 'final_fare_minor'),
+    completedAt: row.completed_at?.toISOString() ?? null,
   };
 }
 
@@ -1062,6 +1535,33 @@ async function persistRejectionReceipt(
       input.requestFingerprint,
       JSON.stringify(response),
       tripId,
+    ],
+  );
+}
+
+async function persistLifecycleReceipt(
+  executor: DatabaseExecutor,
+  input: {
+    actorUserId: string;
+    operation: string;
+    idempotencyKey: string;
+    requestFingerprint: Buffer;
+    response: TripDetailResponse;
+    tripId: string;
+  },
+): Promise<void> {
+  await executor.query(
+    `INSERT INTO trip.command_receipts (
+       actor_user_id, operation, idempotency_key, request_fingerprint,
+       response_body, trip_id
+     ) VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      input.actorUserId,
+      input.operation,
+      input.idempotencyKey,
+      input.requestFingerprint,
+      JSON.stringify(input.response),
+      input.tripId,
     ],
   );
 }

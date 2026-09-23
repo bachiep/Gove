@@ -37,10 +37,12 @@ Offer. A Driver may send `location`; other roles receive `AUTH_FORBIDDEN`.
 
 - `authenticated` confirms the actor and roles.
 - `trip.snapshot` is sent after an authorized subscription and is the reconnect
-  baseline. It includes Trip state/version and the latest Driver location when
+  baseline. It includes Trip state/version, assignment Driver ID, completion
+  metering/final fare when available, and the latest Driver location when
   available.
 - `trip.event` relays a committed `trip.outbox_events` row with event ID,
-  aggregate version, type, payload, and occurrence time.
+  aggregate version, type, payload, and occurrence time. Completion payloads
+  include observed metering and final fare.
 - `driver.location` broadcasts a validated latest location to subscribers of the
   Driver's current Trip.
 - `location.accepted`, `pong`, and `error` acknowledge commands or report a

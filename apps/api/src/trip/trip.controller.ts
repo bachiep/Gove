@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Headers,
   HttpStatus,
   Inject,
@@ -13,7 +14,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import type { TripResponse } from '@gove/contracts';
+import type { TripHistoryItem, TripResponse } from '@gove/contracts';
 
 import { ApiError } from '../common/http/api-error.js';
 import { parseInput } from '../common/http/validation.js';
@@ -63,5 +64,13 @@ export class TripController {
       correlationId,
       ...parseInput(createTripSchema, body),
     });
+  }
+
+  @Get('history')
+  @Roles('CUSTOMER', 'DRIVER')
+  @ApiOperation({ summary: 'List the current actor Trip history' })
+  history(@CurrentActor() actor: SessionActor): Promise<TripHistoryItem[]> {
+    const role = actor.roles.includes('DRIVER') ? 'DRIVER' : 'CUSTOMER';
+    return this.trips.listHistory(actor.id, role);
   }
 }

@@ -12,7 +12,11 @@ interface TripSnapshotRow extends QueryResultRow {
   version: number;
   currency: string;
   quoted_total_fare_minor: string;
+  actual_distance_meters: number | null;
+  actual_duration_seconds: number | null;
+  final_fare_minor: string | null;
   created_at: Date;
+  completed_at: Date | null;
   driver_id: string | null;
   driver_latitude: number | null;
   driver_longitude: number | null;
@@ -47,28 +51,25 @@ export class RealtimeRepository {
   ): Promise<TripRealtimeSnapshot | null> {
     const result = await this.database.query<TripSnapshotRow>(
       `SELECT t.id, t.fare_quote_id, t.service_type_code, t.state, t.version,
-              t.currency, t.quoted_total_fare_minor, t.created_at,
-              assignment.driver_id,
+              t.currency, t.quoted_total_fare_minor,
+              t.actual_distance_meters, t.actual_duration_seconds,
+              t.final_fare_minor, t.completed_at, t.created_at,
+              assignment.driver_user_id AS driver_id,
               ST_Y(loc.location::geometry)::double precision AS driver_latitude,
               ST_X(loc.location::geometry)::double precision AS driver_longitude,
               loc.accuracy_meters AS driver_accuracy_meters,
               loc.captured_at AS driver_captured_at,
               loc.received_at AS driver_received_at
        FROM trip.trips t
-       LEFT JOIN LATERAL (
-         SELECT ws.driver_user_id AS driver_id
-         FROM dispatch.driver_work_states ws
-         WHERE ws.current_trip_id = t.id
-           AND ws.work_state IN ('RESERVED', 'TO_PICKUP', 'ON_TRIP')
-         ORDER BY ws.updated_at DESC
-         LIMIT 1
-       ) assignment ON true
+       LEFT JOIN dispatch.assignments assignment
+         ON assignment.trip_id = t.id
+        AND assignment.status IN ('ACTIVE', 'COMPLETED')
        LEFT JOIN location.latest_driver_locations loc
-         ON loc.driver_user_id = assignment.driver_id
+         ON loc.driver_user_id = assignment.driver_user_id
        WHERE t.id = $1
          AND (
            t.customer_user_id = $2
-           OR assignment.driver_id = $2
+           OR assignment.driver_user_id = $2
            OR EXISTS (
              SELECT 1
              FROM dispatch.trip_offers o
@@ -92,6 +93,11 @@ export class RealtimeRepository {
       quotedTotalFareMinor: Number(row.quoted_total_fare_minor),
       createdAt: row.created_at.toISOString(),
       driverId: row.driver_id,
+      actualDistanceMeters: row.actual_distance_meters,
+      actualDurationSeconds: row.actual_duration_seconds,
+      finalFareMinor:
+        row.final_fare_minor === null ? null : Number(row.final_fare_minor),
+      completedAt: row.completed_at?.toISOString() ?? null,
       driverLocation:
         row.driver_id &&
         row.driver_latitude !== null &&

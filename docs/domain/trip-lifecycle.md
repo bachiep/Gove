@@ -72,4 +72,11 @@ Reassignment is one database transaction: verify the expected Trip and Assignmen
 
 ## Implemented evidence
 
-The pure Trip transition function and its transition matrix are implemented in `apps/api/src/trip/domain`. The M0 suite verifies every allowed transition, version increments, terminal-state rejection, and representative invalid commands. Persistence, authorization, audit recording, and cross-module dispatch behavior remain planned for their owning milestones.
+The pure Trip transition function and its transition matrix are implemented in
+`apps/api/src/trip/domain`. M0 verifies allowed transitions, version
+increments, terminal-state rejection, and invalid commands. M3/M4 integration
+tests verify persistence, authorization, assignment acceptance, realtime
+events, and reconnect snapshots. M5 integration tests verify the Driver-owned
+`AT_PICKUP → IN_PROGRESS → COMPLETED` path, duplicate completion, final fare
+calculation, and Driver Work State restoration. Cancellation rules remain
+planned and are not represented as an implemented endpoint.

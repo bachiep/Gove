@@ -23,7 +23,7 @@ Prove the architecture through one executable Customer-to-Driver ride flow rathe
 - HTTP prefix: `/api/v1`.
 - Health: `/api/v1/health/live` and `/api/v1/health/ready`.
 - OpenAPI: generated from the running API and checked for compatibility.
-- WebSocket path: `/realtime`; authenticated before subscription.
+- WebSocket path: `/ws`; authenticated before subscription.
 - Mutating retryable commands require `Idempotency-Key`.
 - Errors expose stable `code`, safe `message`, `correlationId`, and field details where applicable.
 

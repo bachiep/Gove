@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
-import type { ServiceType, TripResponse } from '@gove/contracts';
+import type {
+  PaymentStatus,
+  ServiceType,
+  TripHistoryItem,
+  TripResponse,
+} from '@gove/contracts';
 import type { QueryResultRow } from 'pg';
 
 import { DatabaseService } from '../database/database.service.js';
@@ -17,6 +22,7 @@ interface QuoteRow extends QueryResultRow {
   dropoff_longitude: string;
   dropoff_latitude: string;
   rule_snapshot: unknown;
+  applied_surge_multiplier_bps: number;
   total_fare_minor: string;
   currency: string;
   status: 'ACTIVE' | 'CONSUMED' | 'EXPIRED' | 'INVALIDATED';
@@ -26,6 +32,23 @@ interface QuoteRow extends QueryResultRow {
 interface TripRow extends QueryResultRow {
   id: string;
   created_at: Date;
+}
+
+interface HistoryRow extends QueryResultRow {
+  id: string;
+  fare_quote_id: string;
+  service_type_code: ServiceType;
+  state: TripHistoryItem['state'];
+  version: number;
+  currency: string;
+  quoted_total_fare_minor: string;
+  actual_distance_meters: number | null;
+  actual_duration_seconds: number | null;
+  final_fare_minor: string | null;
+  created_at: Date;
+  completed_at: Date | null;
+  driver_id: string | null;
+  payment_status: PaymentStatus | null;
 }
 
 export interface CreateTripRecord {
@@ -77,7 +100,8 @@ export class TripRepository {
                 dropoff_label,
                 ST_X(dropoff_location::geometry) AS dropoff_longitude,
                 ST_Y(dropoff_location::geometry) AS dropoff_latitude,
-                rule_snapshot, total_fare_minor, currency, status, expires_at
+                rule_snapshot, applied_surge_multiplier_bps, total_fare_minor,
+                currency, status, expires_at
          FROM pricing.fare_quotes
          WHERE id = $1
          FOR UPDATE`,
@@ -107,12 +131,13 @@ export class TripRepository {
         `INSERT INTO trip.trips (
           id, customer_user_id, fare_quote_id, service_type_code,
           pickup_label, pickup_location, dropoff_label, dropoff_location,
-          quote_snapshot, quoted_total_fare_minor, currency
+          quote_snapshot, applied_surge_multiplier_bps, quoted_total_fare_minor,
+          currency
         ) VALUES (
           $1, $2, $3, $4,
           $5, ST_SetSRID(ST_MakePoint($6, $7), 4326)::geography,
           $8, ST_SetSRID(ST_MakePoint($9, $10), 4326)::geography,
-          $11, $12, $13
+          $11, $12, $13, $14
         ) RETURNING id, created_at`,
         [
           tripId,
@@ -126,6 +151,7 @@ export class TripRepository {
           finiteNumber(quote.dropoff_longitude, 'dropoff_longitude'),
           finiteNumber(quote.dropoff_latitude, 'dropoff_latitude'),
           JSON.stringify(quote.rule_snapshot),
+          quote.applied_surge_multiplier_bps,
           safeInteger(quote.total_fare_minor, 'total_fare_minor'),
           quote.currency,
         ],
@@ -185,6 +211,59 @@ export class TripRepository {
       );
       return result;
     });
+  }
+
+  async listHistory(
+    actorId: string,
+    role: 'CUSTOMER' | 'DRIVER',
+  ): Promise<TripHistoryItem[]> {
+    const result = await this.database.query<HistoryRow>(
+      `SELECT t.id, t.fare_quote_id, t.service_type_code, t.state, t.version,
+              t.currency, t.quoted_total_fare_minor,
+              t.actual_distance_meters, t.actual_duration_seconds,
+              t.final_fare_minor, t.created_at, t.completed_at,
+              a.driver_user_id AS driver_id,
+              latest_payment.status AS payment_status
+       FROM trip.trips t
+       LEFT JOIN dispatch.assignments a ON a.trip_id = t.id
+       LEFT JOIN LATERAL (
+         SELECT p.status
+         FROM payment.payment_attempts p
+         WHERE p.trip_id = t.id
+         ORDER BY p.attempt_number DESC
+         LIMIT 1
+       ) latest_payment ON true
+       WHERE t.state IN ('COMPLETED', 'CANCELLED', 'NO_DRIVER_AVAILABLE')
+         AND (
+           ($2 = 'CUSTOMER' AND t.customer_user_id = $1)
+           OR ($2 = 'DRIVER' AND a.driver_user_id = $1)
+         )
+       ORDER BY t.created_at DESC
+       LIMIT 50`,
+      [actorId, role],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      fareQuoteId: row.fare_quote_id,
+      serviceType: row.service_type_code,
+      state: row.state,
+      version: row.version,
+      currency: row.currency,
+      quotedTotalFareMinor: safeInteger(
+        row.quoted_total_fare_minor,
+        'quoted_total_fare_minor',
+      ),
+      createdAt: row.created_at.toISOString(),
+      driverId: row.driver_id,
+      actualDistanceMeters: row.actual_distance_meters,
+      actualDurationSeconds: row.actual_duration_seconds,
+      finalFareMinor:
+        row.final_fare_minor === null
+          ? null
+          : safeInteger(row.final_fare_minor, 'final_fare_minor'),
+      completedAt: row.completed_at?.toISOString() ?? null,
+      paymentStatus: row.payment_status,
+    }));
   }
 }
 

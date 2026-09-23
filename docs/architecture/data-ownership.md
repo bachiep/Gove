@@ -1,6 +1,6 @@
 # Data Ownership
 
-Status: Designed
+Status: Tested locally
 Last updated: 2026-09-24
 
 One PostgreSQL cluster is used initially, but tables and writes remain module-owned. Cross-module reads use module interfaces or explicit read projections; callers do not update another module's tables.
@@ -11,9 +11,9 @@ One PostgreSQL cluster is used initially, but tables and writes remain module-ow
 | Driver profile, Vehicle, and eligibility                                            | Driver           | Driver ID and eligibility result                                            |
 | Latest Location and freshness                                                       | Location         | Nearby candidate IDs and location projection                                |
 | Pricing rule and Fare Quote                                                         | Pricing          | Quote ID, expiry, rule version, amount breakdown                            |
-| Trip, transition history, assignment reference                                      | Trip             | Trip snapshot and versioned domain events                                   |
+| Trip, transition history, completion metering, and final fare                       | Trip             | Trip detail snapshot and versioned domain events                            |
 | Dispatch Request, Driver Work State, Driver Reservation, Trip Offer, and Assignment | Dispatch         | Candidate demand, work-state result, assignment result, and dispatch events |
-| Payment Attempt and reconciliation state                                            | Payment          | Settlement result and versioned events                                      |
+| Payment Attempt, command receipt, and settlement outbox                             | Payment          | Settlement result and versioned events                                      |
 | Notification Delivery Attempt and live subscription                                 | Notification     | Delivery status only                                                        |
 | Outbox record                                                                       | Producing module | Immutable event envelope                                                    |
 
@@ -34,3 +34,12 @@ view. The query does not write those tables or reimplement their state
 transitions; commands continue to use the owning module interfaces and
 transactions. If this projection becomes a scaling boundary, it must move to an
 explicit versioned read model rather than adding cross-module writes.
+
+## Completion and settlement boundary
+
+Dispatch is the transaction coordinator for Driver lifecycle commands because
+it owns the active Assignment and Driver Work State. Trip owns completion
+metering and final fare fields; the fare is calculated from the immutable quote
+snapshot by the Pricing policy. Payment owns attempts and payment command
+receipts. History reads compose these owned records without allowing a caller
+to write another module's tables.

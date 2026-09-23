@@ -3,9 +3,14 @@ import type {
   AuthenticatedActor,
   AuthenticationResponse,
   DispatchMatchResponse,
+  DriverWorkState,
   FareQuoteResponse,
+  PaymentAttemptResponse,
   ReadinessResponse,
   RegistrationResponse,
+  TripDetailResponse,
+  TripHistoryItem,
+  TripOfferResponse,
   TripResponse,
   TripRealtimeSnapshot,
 } from '@gove/contracts';
@@ -28,7 +33,13 @@ type ApiState =
   | { status: 'ready'; details: ReadinessResponse }
   | { status: 'unavailable' };
 type Page =
-  'home' | 'register' | 'sign-in' | 'account' | 'driver-setup' | 'ride-request';
+  | 'home'
+  | 'register'
+  | 'sign-in'
+  | 'account'
+  | 'driver-setup'
+  | 'driver-console'
+  | 'ride-request';
 type RequestState =
   | { state: 'idle' }
   | { state: 'submitting' }
@@ -65,6 +76,7 @@ function pageFromLocation(): Page {
   if (path === '/sign-in') return 'sign-in';
   if (path === '/account') return 'account';
   if (path === '/driver/setup') return 'driver-setup';
+  if (path === '/driver/console') return 'driver-console';
   if (path === '/ride/request') return 'ride-request';
   return 'home';
 }
@@ -125,6 +137,7 @@ export function App() {
       'sign-in': '/sign-in',
       account: '/account',
       'driver-setup': '/driver/setup',
+      'driver-console': '/driver/console',
       'ride-request': '/ride/request',
     };
     window.history.pushState({}, '', path[next]);
@@ -182,8 +195,10 @@ export function App() {
         {page === 'account' ? (
           <AccountPage
             actor={actor}
+            accessToken={accessToken}
             onSignIn={() => navigate('sign-in')}
             onDriverSetup={() => navigate('driver-setup')}
+            onDriverConsole={() => navigate('driver-console')}
             onRideRequest={() => navigate('ride-request')}
           />
         ) : null}
@@ -197,6 +212,14 @@ export function App() {
         ) : null}
         {page === 'driver-setup' ? (
           <DriverSetupPage
+            actor={actor}
+            accessToken={accessToken}
+            onSignIn={() => navigate('sign-in')}
+            onAccount={() => navigate('account')}
+          />
+        ) : null}
+        {page === 'driver-console' ? (
+          <DriverConsolePage
             actor={actor}
             accessToken={accessToken}
             onSignIn={() => navigate('sign-in')}
@@ -411,7 +434,7 @@ function RegisterPage({
           displayName: data.get('displayName'),
           email: data.get('email'),
           password: data.get('password'),
-          role: data.get('role'),
+          requestedRole: data.get('role'),
         }),
       });
       onRegistered();
@@ -561,13 +584,17 @@ function SignInPage({
 
 function AccountPage({
   actor,
+  accessToken,
   onSignIn,
   onDriverSetup,
+  onDriverConsole,
   onRideRequest,
 }: {
   actor: AuthenticatedActor | null;
+  accessToken: string | null;
   onSignIn: () => void;
   onDriverSetup: () => void;
+  onDriverConsole: () => void;
   onRideRequest: () => void;
 }) {
   if (!actor) return <AccessRequired onSignIn={onSignIn} />;
@@ -593,14 +620,23 @@ function AccountPage({
           </div>
         </dl>
         {actor.roles.includes('DRIVER') ? (
-          <button
-            className="primary-link"
-            type="button"
-            onClick={onDriverSetup}
-          >
-            Complete driver setup{' '}
-            <ArrowRight aria-hidden="true" size={20} weight="bold" />
-          </button>
+          <div className="account-action-stack">
+            <button
+              className="primary-link"
+              type="button"
+              onClick={onDriverConsole}
+            >
+              Open driver console{' '}
+              <ArrowRight aria-hidden="true" size={20} weight="bold" />
+            </button>
+            <button
+              className="secondary-link"
+              type="button"
+              onClick={onDriverSetup}
+            >
+              Edit driver setup
+            </button>
+          </div>
         ) : actor.roles.includes('CUSTOMER') ? (
           <div className="account-action-stack">
             <button
@@ -622,6 +658,325 @@ function AccountPage({
           </p>
         )}
       </article>
+      {accessToken &&
+      (actor.roles.includes('CUSTOMER') || actor.roles.includes('DRIVER')) ? (
+        <HistoryPanel accessToken={accessToken} />
+      ) : null}
+    </section>
+  );
+}
+
+function HistoryPanel({ accessToken }: { accessToken: string }) {
+  const [items, setItems] = useState<TripHistoryItem[]>([]);
+  const [state, setState] = useState<RequestState>({ state: 'submitting' });
+
+  useEffect(() => {
+    let active = true;
+    request<TripHistoryItem[]>('/trips/history', {
+      headers: { authorization: `Bearer ${accessToken}` },
+    })
+      .then((result) => {
+        if (!active) return;
+        setItems(result);
+        setState((current) =>
+          current.state === 'submitting' ? { state: 'idle' } : current,
+        );
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setState({ state: 'error', message: (error as Error).message });
+      });
+    return () => {
+      active = false;
+    };
+  }, [accessToken]);
+
+  return (
+    <article
+      className="account-card history-card"
+      aria-labelledby="history-heading"
+    >
+      <div className="form-heading">
+        <h2 id="history-heading">Trip history</h2>
+        <p>Completed and terminal trips owned by this account.</p>
+      </div>
+      {state.state === 'submitting' ? (
+        <p className="notice" role="status">
+          Loading trip history…
+        </p>
+      ) : null}
+      {state.state === 'error' ? (
+        <p className="form-error" role="alert">
+          {state.message}
+        </p>
+      ) : null}
+      {state.state === 'idle' && items.length === 0 ? (
+        <p className="notice">No terminal trips yet.</p>
+      ) : null}
+      {items.length ? (
+        <div className="history-list">
+          {items.map((item) => (
+            <div className="history-row" key={item.id}>
+              <div>
+                <strong>{item.state.replaceAll('_', ' ')}</strong>
+                <span>{new Date(item.createdAt).toLocaleString()}</span>
+              </div>
+              <div>
+                <strong>
+                  {formatFare(
+                    item.finalFareMinor ?? item.quotedTotalFareMinor,
+                    item.currency,
+                  )}
+                </strong>
+                <span>
+                  {item.paymentStatus
+                    ? `Payment ${item.paymentStatus.toLowerCase()}`
+                    : 'Payment not captured'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function DriverConsolePage({
+  actor,
+  accessToken,
+  onSignIn,
+  onAccount,
+}: {
+  actor: AuthenticatedActor | null;
+  accessToken: string | null;
+  onSignIn: () => void;
+  onAccount: () => void;
+}) {
+  const [offers, setOffers] = useState<TripOfferResponse[]>([]);
+  const [current, setCurrent] = useState<TripDetailResponse | null>(null);
+  const [workState, setWorkState] = useState<DriverWorkState>('OFFLINE');
+  const [state, setState] = useState<RequestState>({ state: 'submitting' });
+  const [commandError, setCommandError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!accessToken || !actor?.roles.includes('DRIVER')) return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const [nextOffers, nextCurrent, nextWorkState] = await Promise.all([
+          request<TripOfferResponse[]>('/dispatch/offers/me', {
+            headers: { authorization: `Bearer ${accessToken}` },
+          }),
+          request<TripDetailResponse | null>('/dispatch/trips/current', {
+            headers: { authorization: `Bearer ${accessToken}` },
+          }),
+          request<{ state: DriverWorkState }>('/drivers/me/work-state', {
+            headers: { authorization: `Bearer ${accessToken}` },
+          }),
+        ]);
+        if (!active) return;
+        setOffers(nextOffers);
+        setCurrent(nextCurrent);
+        setWorkState(nextWorkState.state);
+        setState((current) =>
+          current.state === 'submitting' ? { state: 'idle' } : current,
+        );
+      } catch (error) {
+        if (active)
+          setState({ state: 'error', message: (error as Error).message });
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 3000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [accessToken, actor]);
+
+  if (!actor || !accessToken || !actor.roles.includes('DRIVER')) {
+    return <AccessRequired onSignIn={onSignIn} />;
+  }
+
+  const command = async (
+    path: string,
+    options: RequestInit = {},
+  ): Promise<void> => {
+    setState({ state: 'submitting' });
+    setCommandError(null);
+    try {
+      await request(path, {
+        ...options,
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'idempotency-key': crypto.randomUUID(),
+          ...options.headers,
+        },
+      });
+      setState({ state: 'idle' });
+    } catch (error) {
+      const message = (error as Error).message;
+      setCommandError(message);
+      setState({ state: 'error', message });
+    }
+  };
+
+  const toggleAvailability = () => {
+    const next = workState === 'OFFLINE' ? 'AVAILABLE' : 'OFFLINE';
+    void command('/drivers/me/work-state', {
+      method: 'PUT',
+      body: JSON.stringify({ state: next }),
+    });
+  };
+
+  const acceptOffer = (offerId: string) => {
+    void command(`/dispatch/offers/${offerId}/accept`, { method: 'POST' });
+  };
+
+  const transition = (action: 'arrive' | 'start' | 'complete') => {
+    if (!current) return;
+    void command(`/dispatch/trips/${current.id}/${action}`, {
+      method: 'POST',
+      ...(action === 'complete'
+        ? {
+            body: JSON.stringify({
+              actualDistanceMeters: 2500,
+              actualDurationSeconds: 420,
+            }),
+          }
+        : {}),
+    });
+  };
+
+  return (
+    <section className="account-layout driver-console-layout">
+      <div className="account-heading">
+        <p className="eyebrow">Driver operations</p>
+        <h1>Run the assigned journey.</h1>
+        <p>
+          This foreground console polls the API source of truth every three
+          seconds. It does not claim background GPS tracking.
+        </p>
+        <button className="back-link" type="button" onClick={onAccount}>
+          <ArrowLeft aria-hidden="true" size={18} /> Account
+        </button>
+      </div>
+      <div className="driver-console-stack">
+        <article className="account-card driver-console-card">
+          <div className="console-card-heading">
+            <div>
+              <p className="eyebrow">Availability</p>
+              <h2>{workState.replaceAll('_', ' ')}</h2>
+            </div>
+            <span className="driver-state-pill">{workState}</span>
+          </div>
+          <button
+            className="primary-link"
+            type="button"
+            disabled={Boolean(current) || state.state === 'submitting'}
+            onClick={toggleAvailability}
+          >
+            {workState === 'OFFLINE' ? 'Go online' : 'Go offline'}
+          </button>
+          {current ? (
+            <p className="notice">
+              Availability is controlled by the active trip.
+            </p>
+          ) : null}
+        </article>
+
+        <article className="account-card driver-console-card">
+          <div className="form-heading">
+            <h2>Trip offers</h2>
+            <p>Offers are reserved server-side and expire automatically.</p>
+          </div>
+          {offers.length ? (
+            <div className="offer-list">
+              {offers.map((offer) => (
+                <div className="offer-row" key={offer.id}>
+                  <div>
+                    <strong>Offer {offer.attemptNumber}</strong>
+                    <span>{offer.tripId}</span>
+                  </div>
+                  <button
+                    className="secondary-link"
+                    type="button"
+                    disabled={state.state === 'submitting'}
+                    onClick={() => acceptOffer(offer.id)}
+                  >
+                    Accept offer
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="notice">No pending offers.</p>
+          )}
+        </article>
+
+        <article className="account-card driver-console-card">
+          <div className="form-heading">
+            <h2>Current trip</h2>
+            <p>Advance only through the server-enforced lifecycle.</p>
+          </div>
+          {current ? (
+            <>
+              <dl className="quote-details">
+                <div>
+                  <dt>State</dt>
+                  <dd>{current.state}</dd>
+                </div>
+                <div>
+                  <dt>Trip reference</dt>
+                  <dd>{current.id}</dd>
+                </div>
+              </dl>
+              <div className="driver-action-row">
+                {current.state === 'DRIVER_TO_PICKUP' ? (
+                  <button
+                    className="primary-link"
+                    type="button"
+                    onClick={() => transition('arrive')}
+                  >
+                    Arrived at pickup
+                  </button>
+                ) : null}
+                {current.state === 'AT_PICKUP' ? (
+                  <button
+                    className="primary-link"
+                    type="button"
+                    onClick={() => transition('start')}
+                  >
+                    Start trip
+                  </button>
+                ) : null}
+                {current.state === 'IN_PROGRESS' ? (
+                  <button
+                    className="primary-link"
+                    type="button"
+                    onClick={() => transition('complete')}
+                  >
+                    Complete trip
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <p className="notice">Accept an offer to begin a driver journey.</p>
+          )}
+        </article>
+        {state.state === 'submitting' ? (
+          <p className="notice" role="status">
+            Updating driver state…
+          </p>
+        ) : null}
+        {state.state === 'error' || commandError ? (
+          <p className="form-error" role="alert">
+            {commandError ?? (state.state === 'error' ? state.message : '')}
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -660,13 +1015,17 @@ function RideRequestPage({
   const [form, setForm] = useState<RideFormValues>(initialRideForm);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [quote, setQuote] = useState<FareQuoteResponse | null>(null);
-  const [trip, setTrip] = useState<TripResponse | null>(null);
+  const [trip, setTrip] = useState<TripDetailResponse | null>(null);
   const [dispatch, setDispatch] = useState<DispatchMatchResponse | null>(null);
+  const [payment, setPayment] = useState<PaymentAttemptResponse | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<
     'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
   >('idle');
   const [quoteState, setQuoteState] = useState<RequestState>({ state: 'idle' });
   const [tripState, setTripState] = useState<RequestState>({ state: 'idle' });
+  const [paymentState, setPaymentState] = useState<RequestState>({
+    state: 'idle',
+  });
   const [now, setNow] = useState(() => Date.now());
   const errorSummaryRef = useRef<HTMLDivElement>(null);
   const quoteKeyRef = useRef(crypto.randomUUID());
@@ -707,13 +1066,7 @@ function RideRequestPage({
         return;
       }
       if (message.type === 'trip.snapshot' && message.snapshot) {
-        setTrip((current) =>
-          mergeRealtimeTrip(
-            current,
-            message.snapshot?.state,
-            message.snapshot?.version,
-          ),
-        );
+        setTrip((current) => mergeRealtimeTrip(current, message.snapshot));
         return;
       }
       if (message.type === 'trip.event' && message.tripId === trip.id) {
@@ -722,11 +1075,13 @@ function RideRequestPage({
         const next = payload as {
           state?: TripResponse['state'];
           version?: number;
+          actualDistanceMeters?: number;
+          actualDurationSeconds?: number;
+          finalFareMinor?: number;
+          completedAt?: string;
         };
         if (next.state && typeof next.version === 'number') {
-          setTrip((current) =>
-            mergeRealtimeTrip(current, next.state, next.version),
-          );
+          setTrip((current) => mergeRealtimeTrip(current, next));
         }
         return;
       }
@@ -771,6 +1126,8 @@ function RideRequestPage({
       setQuote(null);
       setTrip(null);
       setDispatch(null);
+      setPayment(null);
+      setPaymentState({ state: 'idle' });
       quoteKeyRef.current = crypto.randomUUID();
       tripKeyRef.current = crypto.randomUUID();
       matchKeyRef.current = crypto.randomUUID();
@@ -799,6 +1156,8 @@ function RideRequestPage({
       });
       setQuote(result);
       setTrip(null);
+      setPayment(null);
+      setPaymentState({ state: 'idle' });
       setQuoteState({ state: 'idle' });
     } catch (error) {
       setQuoteState({ state: 'error', message: (error as Error).message });
@@ -809,6 +1168,8 @@ function RideRequestPage({
     setQuote(null);
     setTrip(null);
     setDispatch(null);
+    setPayment(null);
+    setPaymentState({ state: 'idle' });
     setQuoteState({ state: 'idle' });
     setTripState({ state: 'idle' });
     quoteKeyRef.current = crypto.randomUUID();
@@ -828,7 +1189,7 @@ function RideRequestPage({
         },
         body: JSON.stringify({ fareQuoteId: quote.id }),
       });
-      setTrip(result);
+      setTrip(toTripDetail(result));
       const matching = await request<DispatchMatchResponse>(
         `/dispatch/trips/${result.id}/match`,
         {
@@ -855,6 +1216,28 @@ function RideRequestPage({
     }
   };
 
+  const capturePayment = async () => {
+    if (!trip || trip.state !== 'COMPLETED') return;
+    setPaymentState({ state: 'submitting' });
+    try {
+      const result = await request<PaymentAttemptResponse>(
+        `/payments/trips/${trip.id}/capture`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+            'idempotency-key': crypto.randomUUID(),
+          },
+          body: JSON.stringify({ simulationOutcome: 'SUCCEEDED' }),
+        },
+      );
+      setPayment(result);
+      setPaymentState({ state: 'idle' });
+    } catch (error) {
+      setPaymentState({ state: 'error', message: (error as Error).message });
+    }
+  };
+
   return (
     <section className="ride-layout">
       <div className="ride-intro">
@@ -862,8 +1245,8 @@ function RideRequestPage({
         <h1>Plan one clear journey.</h1>
         <p>
           This slice combines a deterministic Fare Quote, a durable Trip,
-          bounded matching, and a live status channel. Routing, payment, and
-          delivery remain outside the current demo boundary.
+          bounded matching, a live status channel, and an explicit payment
+          simulator. Routing and background location remain outside the demo.
         </p>
         <button className="back-link" type="button" onClick={onAccount}>
           <ArrowLeft aria-hidden="true" size={18} /> Account
@@ -1161,12 +1544,50 @@ function RideRequestPage({
                 <dt>Trip version</dt>
                 <dd>{trip.version}</dd>
               </div>
+              {trip.finalFareMinor !== null ? (
+                <div>
+                  <dt>Final fare</dt>
+                  <dd>{formatFare(trip.finalFareMinor, trip.currency)}</dd>
+                </div>
+              ) : null}
+              {trip.actualDistanceMeters !== null ? (
+                <div>
+                  <dt>Observed distance</dt>
+                  <dd>{formatDistance(trip.actualDistanceMeters)}</dd>
+                </div>
+              ) : null}
             </dl>
             {dispatch?.offer && trip.state === 'MATCHING' ? (
               <p className="notice trip-offer-notice">
                 A Driver Offer is pending. The customer status will update as
                 soon as the Offer is accepted, rejected, or expires.
               </p>
+            ) : null}
+            {trip.state === 'COMPLETED' ? (
+              <div className="payment-panel" aria-live="polite">
+                <p className="notice">
+                  {payment
+                    ? `Payment ${payment.status.toLowerCase()}${payment.providerReference ? ` · ${payment.providerReference}` : ''}.`
+                    : 'The trip is complete. Capture the simulated payment to close settlement.'}
+                </p>
+                {!payment ? (
+                  <button
+                    className="primary-link"
+                    type="button"
+                    disabled={paymentState.state === 'submitting'}
+                    onClick={capturePayment}
+                  >
+                    {paymentState.state === 'submitting'
+                      ? 'Capturing payment…'
+                      : 'Capture simulated payment'}
+                  </button>
+                ) : null}
+                {paymentState.state === 'error' ? (
+                  <p className="form-error" role="alert">
+                    {paymentState.message}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
             <button
               className="secondary-link"
@@ -1226,6 +1647,17 @@ function formatDistance(meters: number): string {
   return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`;
 }
 
+function toTripDetail(trip: TripResponse): TripDetailResponse {
+  return {
+    ...trip,
+    driverId: null,
+    actualDistanceMeters: null,
+    actualDurationSeconds: null,
+    finalFareMinor: null,
+    completedAt: null,
+  };
+}
+
 function tripStateDescription(state: TripResponse['state']): string {
   switch (state) {
     case 'MATCHING':
@@ -1242,13 +1674,31 @@ function tripStateDescription(state: TripResponse['state']): string {
 }
 
 function mergeRealtimeTrip(
-  current: TripResponse | null,
-  state: TripResponse['state'] | undefined,
-  version: number | undefined,
-): TripResponse | null {
-  if (!current || !state || typeof version !== 'number') return current;
-  if (version < current.version) return current;
-  return { ...current, state, version };
+  current: TripDetailResponse | null,
+  next:
+    | Partial<
+        Pick<
+          TripRealtimeSnapshot,
+          | 'state'
+          | 'version'
+          | 'driverId'
+          | 'actualDistanceMeters'
+          | 'actualDurationSeconds'
+          | 'finalFareMinor'
+          | 'completedAt'
+        >
+      >
+    | undefined,
+): TripDetailResponse | null {
+  if (!current || !next || !next.state || typeof next.version !== 'number')
+    return current;
+  if (next.version < current.version) return current;
+  return {
+    ...current,
+    ...next,
+    state: next.state,
+    version: next.version,
+  };
 }
 
 function realtimeStatusLabel(

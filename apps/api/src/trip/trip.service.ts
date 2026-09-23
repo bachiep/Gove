@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { TripResponse } from '@gove/contracts';
+import type { TripHistoryItem, TripResponse } from '@gove/contracts';
 
 import { ApiError } from '../common/http/api-error.js';
 import { TripCommandError, TripRepository } from './trip.repository.js';
@@ -46,5 +46,12 @@ export class TripService {
       }
       throw error;
     }
+  }
+
+  async listHistory(
+    actorId: string,
+    role: 'CUSTOMER' | 'DRIVER',
+  ): Promise<TripHistoryItem[]> {
+    return this.repository.listHistory(actorId, role);
   }
 }

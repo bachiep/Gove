@@ -53,6 +53,23 @@ describe('Dispatch HTTP seam', () => {
       offer: { status: 'PENDING', driverId: driver.actorId, attemptNumber: 1 },
     });
 
+    const pendingOffers = await server.inject({
+      method: 'GET',
+      url: '/api/v1/dispatch/offers/me',
+      headers: { authorization: `Bearer ${driver.accessToken}` },
+    });
+    expect(pendingOffers.statusCode).toBe(200);
+    expect(pendingOffers.json()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ tripId })]),
+    );
+    const noCurrentTrip = await server.inject({
+      method: 'GET',
+      url: '/api/v1/dispatch/trips/current',
+      headers: { authorization: `Bearer ${driver.accessToken}` },
+    });
+    expect(noCurrentTrip.statusCode).toBe(200);
+    expect(noCurrentTrip.json()).toBeNull();
+
     const offerId = matching.json().offer.id as string;
     const acceptKey = randomUUID();
     const [first, retry] = await Promise.all([
@@ -80,6 +97,29 @@ describe('Dispatch HTTP seam', () => {
     expect(workState.rows[0]).toMatchObject({
       work_state: 'TO_PICKUP',
       current_trip_id: tripId,
+    });
+
+    const currentTrip = await server.inject({
+      method: 'GET',
+      url: '/api/v1/dispatch/trips/current',
+      headers: { authorization: `Bearer ${driver.accessToken}` },
+    });
+    expect(currentTrip.statusCode).toBe(200);
+    expect(currentTrip.json()).toMatchObject({
+      id: tripId,
+      state: 'DRIVER_TO_PICKUP',
+      driverId: driver.actorId,
+    });
+
+    const currentWorkState = await server.inject({
+      method: 'GET',
+      url: '/api/v1/drivers/me/work-state',
+      headers: { authorization: `Bearer ${driver.accessToken}` },
+    });
+    expect(currentWorkState.statusCode).toBe(200);
+    expect(currentWorkState.json()).toMatchObject({
+      driverId: driver.actorId,
+      state: 'TO_PICKUP',
     });
   });
 
@@ -347,6 +387,92 @@ describe('Dispatch HTTP seam', () => {
     });
   });
 
+  it('drives an accepted Trip through Pickup, start, completion, and final Fare', async () => {
+    const customer = await registerAndLogin('CUSTOMER', 'Completion Customer');
+    const driver = await registerAndLogin('DRIVER', 'Completion Driver');
+    await setAllAvailableDriversOffline();
+    await approveDriver(driver.actorId, 'completion');
+    await sendLocationAndGoOnline(driver.accessToken);
+
+    const tripId = await createRequestedTrip(customer.accessToken);
+    const matching = await startMatching(customer.accessToken, tripId);
+    const offerId = matching.json().offer.id as string;
+    const accepted = await acceptOffer(
+      driver.accessToken,
+      offerId,
+      randomUUID(),
+    );
+    expect(accepted.statusCode).toBe(201);
+
+    const arrived = await transitionTrip(
+      driver.accessToken,
+      tripId,
+      'arrive',
+      randomUUID(),
+    );
+    expect(arrived.statusCode).toBe(201);
+    expect(arrived.json()).toMatchObject({
+      id: tripId,
+      state: 'AT_PICKUP',
+      version: 3,
+      driverId: driver.actorId,
+      finalFareMinor: null,
+    });
+
+    const started = await transitionTrip(
+      driver.accessToken,
+      tripId,
+      'start',
+      randomUUID(),
+    );
+    expect(started.statusCode).toBe(201);
+    expect(started.json()).toMatchObject({
+      id: tripId,
+      state: 'IN_PROGRESS',
+      version: 4,
+    });
+
+    const completeKey = randomUUID();
+    const [completed, replayed] = await Promise.all([
+      completeTrip(driver.accessToken, tripId, completeKey),
+      completeTrip(driver.accessToken, tripId, completeKey),
+    ]);
+    expect(completed.statusCode).toBe(201);
+    expect(replayed.statusCode).toBe(201);
+    expect(replayed.json()).toEqual(completed.json());
+    expect(completed.json()).toMatchObject({
+      id: tripId,
+      state: 'COMPLETED',
+      version: 5,
+      actualDistanceMeters: 2_500,
+      actualDurationSeconds: 420,
+      finalFareMinor: 31_450,
+    });
+
+    const durableState = await database.query<{
+      assignment_status: string;
+      work_state: string;
+      final_fare_minor: string;
+      transition_count: string;
+    }>(
+      `SELECT a.status AS assignment_status,
+              ws.work_state,
+              t.final_fare_minor,
+              (SELECT count(*)::text FROM trip.state_transitions WHERE trip_id = t.id) AS transition_count
+       FROM trip.trips t
+       JOIN dispatch.assignments a ON a.trip_id = t.id
+       JOIN dispatch.driver_work_states ws ON ws.driver_user_id = a.driver_user_id
+       WHERE t.id = $1`,
+      [tripId],
+    );
+    expect(durableState.rows[0]).toMatchObject({
+      assignment_status: 'COMPLETED',
+      work_state: 'AVAILABLE',
+      final_fare_minor: '31450',
+      transition_count: '6',
+    });
+  });
+
   async function registerAndLogin(
     role: 'CUSTOMER' | 'DRIVER',
     displayName: string,
@@ -505,6 +631,38 @@ describe('Dispatch HTTP seam', () => {
         authorization: `Bearer ${accessToken}`,
         'idempotency-key': idempotencyKey,
       },
+    });
+  }
+
+  function transitionTrip(
+    accessToken: string,
+    tripId: string,
+    action: 'arrive' | 'start',
+    idempotencyKey: string,
+  ) {
+    return server.inject({
+      method: 'POST',
+      url: `/api/v1/dispatch/trips/${tripId}/${action}`,
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'idempotency-key': idempotencyKey,
+      },
+    });
+  }
+
+  function completeTrip(
+    accessToken: string,
+    tripId: string,
+    idempotencyKey: string,
+  ) {
+    return server.inject({
+      method: 'POST',
+      url: `/api/v1/dispatch/trips/${tripId}/complete`,
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'idempotency-key': idempotencyKey,
+      },
+      payload: { actualDistanceMeters: 2_500, actualDurationSeconds: 420 },
     });
   }
 });

@@ -33,6 +33,18 @@ export interface InitialFareQuote {
   ruleSnapshot: Readonly<FarePricingRuleSnapshot>;
 }
 
+export interface FinalFare {
+  currency: string;
+  baseFareMinor: number;
+  distanceFareMinor: number;
+  durationFareMinor: number;
+  subtotalMinor: number;
+  serviceMultiplierBps: number;
+  serviceAdjustedFareMinor: number;
+  appliedSurgeMultiplierBps: number;
+  totalFareMinor: number;
+}
+
 export class PricingInputError extends Error {
   readonly code = 'INVALID_PRICING_INPUT';
 
@@ -101,6 +113,75 @@ export function quoteInitialFare(
     appliedSurgeMultiplierBps,
     totalFareMinor,
     ruleSnapshot: Object.freeze({ ...rules }),
+  };
+}
+
+/**
+ * Calculates the final Fare from observed demo metering and the immutable
+ * pricing snapshot accepted when the Trip was quoted. The surge value is
+ * clamped to the snapshot's bounds so persisted or legacy data cannot bypass
+ * the pricing policy.
+ */
+export function calculateFinalFare(
+  input: {
+    distanceMeters: number;
+    durationSeconds: number;
+    appliedSurgeMultiplierBps: number;
+  },
+  rules: FarePricingRuleSnapshot,
+): FinalFare {
+  validateInput({
+    distanceMeters: input.distanceMeters,
+    durationSeconds: input.durationSeconds,
+    requestedSurgeMultiplierBps: input.appliedSurgeMultiplierBps,
+  });
+  validateRules(rules);
+
+  const distanceFareMinor = ceilRatio(
+    checkedMultiply(
+      input.distanceMeters,
+      rules.distanceRateMinorPerKilometer,
+      'distance fare',
+    ),
+    METERS_PER_KILOMETER,
+  );
+  const durationFareMinor = ceilRatio(
+    checkedMultiply(
+      input.durationSeconds,
+      rules.durationRateMinorPerMinute,
+      'duration fare',
+    ),
+    SECONDS_PER_MINUTE,
+  );
+  const subtotalMinor = checkedSum(
+    [rules.baseFareMinor, distanceFareMinor, durationFareMinor],
+    'subtotal',
+  );
+  const serviceAdjustedFareMinor = applyMultiplier(
+    subtotalMinor,
+    rules.serviceMultiplierBps,
+    'service multiplier',
+  );
+  const appliedSurgeMultiplierBps = clamp(
+    input.appliedSurgeMultiplierBps,
+    rules.minimumSurgeMultiplierBps,
+    rules.maximumSurgeMultiplierBps,
+  );
+
+  return {
+    currency: rules.currency,
+    baseFareMinor: rules.baseFareMinor,
+    distanceFareMinor,
+    durationFareMinor,
+    subtotalMinor,
+    serviceMultiplierBps: rules.serviceMultiplierBps,
+    serviceAdjustedFareMinor,
+    appliedSurgeMultiplierBps,
+    totalFareMinor: applyMultiplier(
+      serviceAdjustedFareMinor,
+      appliedSurgeMultiplierBps,
+      'surge multiplier',
+    ),
   };
 }
 

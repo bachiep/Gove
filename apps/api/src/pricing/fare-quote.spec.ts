@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  calculateFinalFare,
   PricingInputError,
   quoteInitialFare,
   type FarePricingRuleSnapshot,
@@ -122,6 +123,57 @@ describe('quoteInitialFare', () => {
           distanceMeters: 1_000.5,
           durationSeconds: 60,
           requestedSurgeMultiplierBps: 10_000,
+        },
+        standardMotorbikeRules,
+      ),
+    ).toThrowError(PricingInputError);
+  });
+});
+
+describe('calculateFinalFare', () => {
+  it('uses observed distance and duration with the accepted surge snapshot', () => {
+    expect(
+      calculateFinalFare(
+        {
+          distanceMeters: 3_250,
+          durationSeconds: 480,
+          appliedSurgeMultiplierBps: 12_000,
+        },
+        standardMotorbikeRules,
+      ),
+    ).toEqual({
+      currency: 'VND',
+      baseFareMinor: 12_000,
+      distanceFareMinor: 22_100,
+      durationFareMinor: 2_800,
+      subtotalMinor: 36_900,
+      serviceMultiplierBps: 10_500,
+      serviceAdjustedFareMinor: 38_745,
+      appliedSurgeMultiplierBps: 12_000,
+      totalFareMinor: 46_494,
+    });
+  });
+
+  it('clamps a malformed stored surge value to the accepted rule bounds', () => {
+    expect(
+      calculateFinalFare(
+        {
+          distanceMeters: 1_000,
+          durationSeconds: 60,
+          appliedSurgeMultiplierBps: 50_000,
+        },
+        standardMotorbikeRules,
+      ).appliedSurgeMultiplierBps,
+    ).toBe(15_000);
+  });
+
+  it('rejects non-integer observed metering', () => {
+    expect(() =>
+      calculateFinalFare(
+        {
+          distanceMeters: 1_000.5,
+          durationSeconds: 60,
+          appliedSurgeMultiplierBps: 10_000,
         },
         standardMotorbikeRules,
       ),

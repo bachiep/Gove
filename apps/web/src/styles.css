@@ -733,6 +733,109 @@ footer span:first-child {
   gap: 16px;
 }
 
+.history-card {
+  grid-column: 1 / -1;
+}
+
+.history-card .form-heading {
+  margin-bottom: 18px;
+}
+
+.history-list,
+.offer-list,
+.driver-console-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.history-row,
+.offer-row {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.history-row > div,
+.offer-row > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.history-row span,
+.offer-row span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.driver-console-layout {
+  grid-template-columns: minmax(0, 0.8fr) minmax(360px, 1fr);
+}
+
+.driver-console-stack {
+  min-width: 0;
+}
+
+.driver-console-card {
+  padding: clamp(22px, 4vw, 32px);
+}
+
+.console-card-heading {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.console-card-heading h2 {
+  font-size: 1.7rem;
+  letter-spacing: -0.04em;
+  margin: 0;
+}
+
+.driver-state-pill,
+.planned-badge {
+  background: #eef4ff;
+  border-radius: 999px;
+  color: #1e3a8a;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.driver-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.driver-action-row .primary-link,
+.driver-console-card > .primary-link {
+  justify-content: center;
+  min-height: 46px;
+  width: 100%;
+}
+
+.payment-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.payment-panel .primary-link {
+  justify-content: center;
+  min-height: 46px;
+}
+
 .ride-layout {
   align-items: start;
   display: grid;
@@ -1097,6 +1200,18 @@ footer span:first-child {
   .quote-details dd {
     max-width: 100%;
     text-align: left;
+  }
+
+  .history-row,
+  .offer-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .history-row .secondary-link,
+  .offer-row .secondary-link {
+    justify-content: center;
+    width: 100%;
   }
 }
 

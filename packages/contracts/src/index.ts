@@ -81,6 +81,14 @@ export interface TripResponse {
   createdAt: string;
 }
 
+export interface TripDetailResponse extends TripResponse {
+  driverId: string | null;
+  actualDistanceMeters: number | null;
+  actualDurationSeconds: number | null;
+  finalFareMinor: number | null;
+  completedAt: string | null;
+}
+
 export const driverWorkStates = [
   'OFFLINE',
   'AVAILABLE',
@@ -125,8 +133,7 @@ export interface DriverLocationSnapshot {
   receivedAt: string;
 }
 
-export interface TripRealtimeSnapshot extends TripResponse {
-  driverId: string | null;
+export interface TripRealtimeSnapshot extends TripDetailResponse {
   driverLocation: DriverLocationSnapshot | null;
 }
 
@@ -141,4 +148,29 @@ export interface RealtimeMetricsResponse {
 export interface DispatchOfferRejectionResponse {
   rejectedOffer: TripOfferResponse;
   reassignedOffer: TripOfferResponse | null;
+}
+
+export const paymentStatuses = [
+  'PENDING',
+  'SUCCEEDED',
+  'FAILED',
+  'UNKNOWN',
+] as const;
+export type PaymentStatus = (typeof paymentStatuses)[number];
+
+export interface PaymentAttemptResponse {
+  id: string;
+  tripId: string;
+  attemptNumber: number;
+  amountMinor: number;
+  currency: string;
+  status: PaymentStatus;
+  providerReference: string | null;
+  failureCode: string | null;
+  requestedAt: string;
+  resolvedAt: string | null;
+}
+
+export interface TripHistoryItem extends TripDetailResponse {
+  paymentStatus: PaymentStatus | null;
 }
