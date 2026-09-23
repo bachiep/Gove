@@ -58,6 +58,10 @@ _Avoid_: Product, vehicle class
 An expiring price estimate calculated for a Ride Request from a versioned pricing rule snapshot.
 _Avoid_: Fare when it has not been finalized, invoice
 
+**Service Area**:
+The geographic boundary in which a Service Type may be quoted or requested.
+_Avoid_: City when a product boundary rather than a municipality is intended
+
 ## Dispatch
 
 **Trip Offer**:

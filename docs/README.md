@@ -22,8 +22,10 @@ Documentation records intended behavior and verified evidence. It must distingui
 | [Testing strategy](testing/strategy.md)                                 | Test levels and evidence gates                  | Accepted       |
 | [Local development](operations/local-development.md)                    | Reproducible local environment                  | Tested locally |
 | [Vertical slice 01](implementation/vertical-slice-01.md)                | First implementation sequence                   | Accepted       |
+| [Vertical slice 02](implementation/vertical-slice-02.md)                | Quote and durable Ride Request design           | Designed       |
 | [Product design system](design/design-system.md)                        | UI tokens and interaction rules                 | Designed       |
 | [Authentication API](api/authentication.md)                             | Auth/session and driver self-service contracts  | Tested locally |
+| [Ride request API](api/ride-requests.md)                                | M2 quote and Trip creation contracts            | Tested locally |
 | [Authentication boundary](security/authentication-and-authorization.md) | Implemented identity controls and limitations   | Tested locally |
 | [Identity and driver data](data/identity-driver-schema.md)              | M1 ownership, schema, and migration rules       | Implemented    |
 
@@ -35,6 +37,7 @@ Documentation records intended behavior and verified evidence. It must distingui
 | [0002](adr/0002-postgresql-is-the-source-of-truth.md) | PostgreSQL owns durable business state   | Accepted |
 | [0003](adr/0003-transactional-outbox.md)              | Publish durable events through an outbox | Accepted |
 | [0004](adr/0004-rotating-refresh-sessions.md)         | Rotate opaque refresh sessions           | Accepted |
+| [0005](adr/0005-immutable-single-use-fare-quotes.md)  | Persist immutable single-use Fare Quotes | Accepted |
 
 ## Evidence rules
 

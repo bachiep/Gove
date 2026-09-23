@@ -36,3 +36,35 @@ export interface ApiErrorResponse {
   correlationId: string;
   details?: Array<{ field: string; reason: string }>;
 }
+
+export const serviceTypes = ['MOTORBIKE_STANDARD', 'CAR_STANDARD'] as const;
+export type ServiceType = (typeof serviceTypes)[number];
+
+export interface RideLocation {
+  label: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface FareQuoteResponse {
+  id: string;
+  serviceType: ServiceType;
+  pickup: RideLocation;
+  dropoff: RideLocation;
+  estimatedDistanceMeters: number;
+  estimatedDurationSeconds: number;
+  currency: string;
+  totalFareMinor: number;
+  expiresAt: string;
+}
+
+export interface TripResponse {
+  id: string;
+  fareQuoteId: string;
+  serviceType: ServiceType;
+  state: 'REQUESTED';
+  version: 0;
+  currency: string;
+  quotedTotalFareMinor: number;
+  createdAt: string;
+}

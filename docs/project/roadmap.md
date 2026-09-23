@@ -5,7 +5,7 @@ Last updated: 2026-09-24
 
 Each milestone exits only when its acceptance evidence is recorded. Dates are intentionally omitted until delivery capacity and the demo deadline are known.
 
-Current milestone: **M1 Identity and Driver Profile — implemented and tested locally.** CI has been defined but is not considered verified until the workflow succeeds on GitHub. M1 lacks rate-limit and browser E2E evidence, so it is not yet a release gate.
+Current milestone: **M2 Ride Request and Pricing — API implementation and concurrency tests are in progress.** CI has been defined but is not considered verified until the workflow succeeds on GitHub. The customer PWA flow remains pending.
 
 | Milestone                        | Outcome                                                                                              | Exit evidence                                                                                           |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
