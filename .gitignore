@@ -16,6 +16,7 @@ Thumbs.db
 .vscode/
 
 .agy-bridge-artifacts/
+artifacts/backups/
 
 node_modules/
 dist/

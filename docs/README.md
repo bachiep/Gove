@@ -21,6 +21,8 @@ Documentation records intended behavior and verified evidence. It must distingui
 | [Failure model](architecture/failure-model.md)                          | Dependency failures and expected behavior         | Designed       |
 | [Testing strategy](testing/strategy.md)                                 | Test levels and evidence gates                    | Accepted       |
 | [Local development](operations/local-development.md)                    | Reproducible local environment                    | Tested locally |
+| [Demo/staging deployment](operations/demo-deployment.md)                | Compose deployment and TLS boundary               | Implemented    |
+| [Backup and restore](operations/backup-and-restore.md)                  | Safe backup and clean-database restore procedure  | Implemented    |
 | [API performance baseline](performance/baseline-2026-09-24.md)          | Reproducible local load measurement               | Measured       |
 | [Vertical slice 01](implementation/vertical-slice-01.md)                | First implementation sequence                     | Accepted       |
 | [Vertical slice 02](implementation/vertical-slice-02.md)                | Quote, durable Ride Request, and customer PWA     | Tested locally |

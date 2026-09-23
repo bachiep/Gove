@@ -1,0 +1,11 @@
+.git
+.github
+.agy-bridge-artifacts
+.env
+node_modules
+apps/*/dist
+apps/web/dist
+packages/*/dist
+artifacts
+coverage
+npm-debug.log

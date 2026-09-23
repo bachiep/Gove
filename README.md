@@ -4,7 +4,7 @@ Gove is an academic real-time ride-hailing and logistics platform. The project i
 
 ## Current status
 
-**Foundation / Tested locally.** The monorepo, API and PWA shells, PostgreSQL/PostGIS environment, migration runner, health checks, CI workflow, and Trip lifecycle domain model are implemented. Formatting, linting, type checking, the automated test suite, production builds, migrations, readiness checks, and responsive browser rendering have been exercised locally. The first end-to-end ride flow is not yet implemented or deployed.
+**M6 hardening / Tested locally.** The MVP customer-to-driver ride flow, live Trip updates, completion, and idempotent payment simulator are implemented and tested locally. The repository includes local infrastructure, migration runner, health checks, CI verification, rate-limit controls, a reproducible load baseline, demo/staging Compose configuration, and a clean-database backup/restore drill. No VPS environment, TLS endpoint, or production-capacity claim has been verified yet.
 
 ## Architecture baseline
 
@@ -26,6 +26,8 @@ The modular monolith is intentional. It keeps domain seams explicit while avoidi
 - [Roadmap](docs/project/roadmap.md)
 - [First vertical slice](docs/implementation/vertical-slice-01.md)
 - [Testing strategy](docs/testing/strategy.md)
+- [Demo/staging deployment](docs/operations/demo-deployment.md)
+- [Backup and restore](docs/operations/backup-and-restore.md)
 
 ## Status vocabulary
 

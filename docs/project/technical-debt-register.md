@@ -13,5 +13,5 @@ These are deliberate deferrals, not completed capabilities.
 | TD-04 | Real payment provider             | Use an explicit simulator adapter                                                  | Before any real-money or card-data workflow                              |
 | TD-05 | Independent services and broker   | Use in-process module calls plus transactional outbox                              | A documented architecture evolution gate is met                          |
 | TD-06 | Native mobile clients             | Use an installable responsive PWA                                                  | A device capability or distribution requirement cannot be met on the web |
-| TD-07 | Auth abuse protection             | No persistent login or registration rate limiter in M1                             | Before any public demo or exposed deployment                             |
+| TD-07 | Distributed auth abuse protection | Process-local fixed-window limits protect one API process only                     | Before a multi-instance or public deployment                             |
 | TD-08 | Account recovery and verification | No email verification, password reset, MFA, or operator provisioning in M1         | Before a user account is treated as an operational identity              |
