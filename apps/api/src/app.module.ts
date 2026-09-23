@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { DatabaseModule } from './database/database.module.js';
+import { DeliveryModule } from './delivery/delivery.module.js';
 import { DispatchModule } from './dispatch/dispatch.module.js';
 import { DriverModule } from './driver/driver.module.js';
 import { HealthController } from './health/health.controller.js';
@@ -14,6 +15,7 @@ import { TripModule } from './trip/trip.module.js';
 @Module({
   imports: [
     DatabaseModule,
+    DeliveryModule,
     DispatchModule,
     IdentityModule,
     DriverModule,

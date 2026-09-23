@@ -30,12 +30,14 @@ Documentation records intended behavior and verified evidence. It must distingui
 | [Vertical slice 02](implementation/vertical-slice-02.md)                | Quote, durable Ride Request, and customer PWA     | Tested locally |
 | [Vertical slice 03](implementation/vertical-slice-03.md)                | Dispatch, reservation, and acceptance boundary    | Tested locally |
 | [Vertical slice 04](implementation/vertical-slice-04.md)                | Authenticated realtime Trip updates               | Tested locally |
+| [Vertical slice 06](implementation/vertical-slice-06.md)                | Delivery aggregate foundation                     | Partial        |
 | [Product design system](design/design-system.md)                        | UI tokens and interaction rules                   | Designed       |
 | [Authentication API](api/authentication.md)                             | Auth/session and driver self-service contracts    | Tested locally |
 | [Ride request API](api/ride-requests.md)                                | M2 quote and Trip creation contracts              | Tested locally |
 | [Dispatch API](api/dispatch.md)                                         | M3 location, matching, offers, and acceptance     | Tested locally |
 | [Realtime API](api/realtime.md)                                         | WebSocket Trip snapshots, events, and locations   | Tested locally |
 | [Completion and settlement API](api/completion-and-settlement.md)       | Driver completion, payment simulator, and history | Tested locally |
+| [Delivery API](api/deliveries.md)                                       | Delivery request and ownership contracts          | Partial        |
 | [Authentication boundary](security/authentication-and-authorization.md) | Implemented identity controls and limitations     | Tested locally |
 | [Identity and driver data](data/identity-driver-schema.md)              | M1 ownership, schema, and migration rules         | Implemented    |
 

@@ -1,6 +1,6 @@
 # M7 Logistics Requirements
 
-Status: Designed; not implemented
+Status: Designed; request/read foundation partially implemented
 Last updated: 2026-09-24
 
 ## First delivery product

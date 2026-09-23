@@ -174,3 +174,27 @@ export interface PaymentAttemptResponse {
 export interface TripHistoryItem extends TripDetailResponse {
   paymentStatus: PaymentStatus | null;
 }
+
+export const deliveryStates = [
+  'REQUESTED',
+  'MATCHING',
+  'DRIVER_TO_PICKUP',
+  'AT_PICKUP',
+  'IN_TRANSIT',
+  'DELIVERED',
+  'CANCELLED',
+  'NO_DRIVER_AVAILABLE',
+] as const;
+export type DeliveryState = (typeof deliveryStates)[number];
+
+export interface DeliveryResponse {
+  id: string;
+  state: DeliveryState;
+  version: number;
+  pickup: RideLocation;
+  dropoff: RideLocation;
+  recipientDisplayName: string;
+  parcelDescription: string;
+  declaredWeightGrams: number;
+  createdAt: string;
+}

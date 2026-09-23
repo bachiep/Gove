@@ -1,6 +1,6 @@
 # Delivery Lifecycle
 
-Status: Designed; not implemented
+Status: Designed; request/read foundation implemented
 Last updated: 2026-09-24
 
 Delivery is a separate logistics aggregate. It may reuse a Driver, Pickup,
