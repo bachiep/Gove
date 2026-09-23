@@ -56,9 +56,17 @@ _Avoid_: Assignment before acceptance, notification
 An exclusive, expiring claim that prevents a Driver from being offered to competing Trips.
 _Avoid_: Lock, assignment
 
-**Availability**:
-The Driver's business state governing whether dispatch may reserve the Driver.
-_Avoid_: Online status, presence
+**Dispatch Request**:
+Dispatch's durable representation of demand for a Driver, linked to a Trip or later Delivery.
+_Avoid_: Trip, generic Job
+
+**Driver Work State**:
+Dispatch's operational state governing whether a Driver is offline, available, reserved, traveling to Pickup, or on a Trip.
+_Avoid_: Online status, presence, eligibility
+
+**Driver Eligibility**:
+Whether a Driver and Vehicle are approved for a Service Type independently of current Driver Work State.
+_Avoid_: Availability, verification status when all eligibility rules are intended
 
 **Latest Location**:
 The freshest accepted position for a Driver, including its capture time and freshness status.

@@ -30,11 +30,11 @@ Each module owns a small interface and hides persistence, invariants, retries, a
 | Module | Interface responsibility | Hidden implementation |
 | --- | --- | --- |
 | Identity | Authenticate, authorize, resolve actor | Password hashing, token rotation, credential persistence |
-| Driver | Manage profile, Vehicle, eligibility, and Availability | State guards and ownership constraints |
+| Driver | Manage profile, Vehicle, and eligibility | Approval rules and ownership constraints |
 | Location | Accept Latest Location and query fresh nearby Drivers | Validation, PostGIS query, optional Redis geo projection |
 | Pricing | Create and validate Fare Quotes; finalize Fare | Rule versions, rounding, bounded surge policy |
 | Trip | Create Trip and execute lifecycle commands | Aggregate versioning, transition log, cancellation rules |
-| Dispatch | Start matching, reserve Driver, manage Trip Offer, accept/reject | Candidate ranking, TTL, transactional contention |
+| Dispatch | Own Dispatch Request, Driver Work State, Reservation, Offer, and Assignment | Candidate ranking, TTL, transactional contention |
 | Payment | Authorize/capture through a provider seam | Idempotency, unknown outcome, reconciliation records |
 | Notification | Deliver semantic user notifications | WebSocket routing and later delivery adapters |
 
@@ -50,7 +50,7 @@ Identity and IDs are shared kernel types; business entities are not shared mutab
 
 ## Consistency model
 
-- Trip, Driver Reservation, Trip Offer, and Driver Availability updates involved in acceptance share one PostgreSQL transaction.
+- Trip, Dispatch Request, Driver Reservation, Trip Offer, Assignment, and Driver Work State updates involved in acceptance share one PostgreSQL transaction.
 - Row locking or an atomic compare-and-set plus unique constraints produces one winner; retries return conflict or the persisted idempotent outcome.
 - Latest Location is last-accepted-write with monotonic capture-time checks and a freshness threshold. It is operational telemetry, not authorization for a Trip transition.
 - Read projections and live messages may be eventually consistent; lifecycle commands and settlement remain strongly consistent.

@@ -8,18 +8,18 @@ One PostgreSQL cluster is used initially, but tables and writes remain module-ow
 | Data | Owner | Other modules receive |
 | --- | --- | --- |
 | User, credential, role, refresh session | Identity | Actor ID and authorized roles |
-| Driver profile, Vehicle, eligibility, Availability | Driver | Driver ID, eligibility result, availability result |
+| Driver profile, Vehicle, and eligibility | Driver | Driver ID and eligibility result |
 | Latest Location and freshness | Location | Nearby candidate IDs and location projection |
 | Pricing rule and Fare Quote | Pricing | Quote ID, expiry, rule version, amount breakdown |
 | Trip, transition history, assignment reference | Trip | Trip snapshot and versioned domain events |
-| Driver Reservation and Trip Offer | Dispatch | Reservation/offer result and dispatch events |
+| Dispatch Request, Driver Work State, Driver Reservation, Trip Offer, and Assignment | Dispatch | Candidate demand, work-state result, assignment result, and dispatch events |
 | Payment Attempt and reconciliation state | Payment | Settlement result and versioned events |
 | Delivery attempt and live subscription | Notification | Delivery status only |
 | Outbox record | Producing module | Immutable event envelope |
 
 ## Transaction rule
 
-The assignment use case requires atomic changes across Driver, Trip, and Dispatch-owned records. The application transaction coordinator invokes each module through an internal interface under one database transaction; it must not embed their state-transition rules or write their tables directly.
+The assignment use case requires atomic changes across Trip and Dispatch-owned records plus an eligibility check from Driver. The application transaction coordinator invokes each module through an internal interface under one database transaction; it must not embed their state-transition rules or write their tables directly.
 
 ## Redis rule
 

@@ -13,7 +13,7 @@ The MVP proves one complete ride lifecycle for three roles through a responsive 
 | --- | --- |
 | FR-01 | A User can register, authenticate, refresh a session, and sign out. |
 | FR-02 | Authorization enforces Customer, Driver, and Operator capabilities and resource ownership. |
-| FR-03 | A Driver can maintain an eligible profile and Vehicle, then move between allowed Availability states. |
+| FR-03 | A Driver can maintain an eligible profile and Vehicle, then request allowed Driver Work State changes. |
 | FR-04 | An authenticated Driver can submit validated, timestamped coordinates while the app is active. |
 | FR-05 | The system marks Latest Location stale after a configurable freshness threshold and excludes it from matching. |
 | FR-06 | A Customer can request a Fare Quote for Pickup, Dropoff, and Service Type. |
