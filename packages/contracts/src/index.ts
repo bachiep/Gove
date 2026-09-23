@@ -10,3 +10,29 @@ export interface ReadinessResponse extends HealthResponse {
     postgis: string;
   };
 }
+
+export const roleCodes = ['CUSTOMER', 'DRIVER', 'OPERATOR'] as const;
+export type RoleCode = (typeof roleCodes)[number];
+
+export interface AuthenticatedActor {
+  id: string;
+  displayName: string;
+  email: string;
+  roles: RoleCode[];
+}
+
+export interface AuthenticationResponse {
+  accessToken: string;
+  actor: AuthenticatedActor;
+}
+
+export interface RegistrationResponse {
+  actor: AuthenticatedActor;
+}
+
+export interface ApiErrorResponse {
+  code: string;
+  message: string;
+  correlationId: string;
+  details?: Array<{ field: string; reason: string }>;
+}

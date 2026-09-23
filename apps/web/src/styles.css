@@ -42,6 +42,21 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 :focus-visible {
   outline: 3px solid #2563eb;
   outline-offset: 4px;
@@ -60,14 +75,17 @@ a {
 .status-link {
   align-items: center;
   display: inline-flex;
-  text-decoration: none;
 }
 
 .brand {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
   font-size: 20px;
   font-weight: 800;
   gap: 10px;
   letter-spacing: -0.03em;
+  padding: 0;
 }
 
 .brand-mark {
@@ -90,6 +108,34 @@ a {
   gap: 8px;
   min-height: 44px;
   padding: 0 15px;
+}
+
+.header-actions,
+.hero-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.text-button,
+.back-link,
+.inline-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--brand-deep);
+  display: inline-flex;
+  font-weight: 800;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 4px;
+}
+
+.inline-button {
+  min-height: auto;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .status-dot {
@@ -166,10 +212,26 @@ h1 {
   padding: 0 20px;
   text-decoration: none;
   transition: background-color 160ms ease;
+  border: 0;
+  font-size: inherit;
 }
 
 .primary-link:hover {
   background: var(--brand-deep);
+}
+
+.secondary-link {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  font-weight: 800;
+  min-height: 52px;
+  padding: 0 20px;
+}
+
+.secondary-link:hover {
+  background: #eaf1ff;
 }
 
 .route-card {
@@ -453,6 +515,228 @@ footer span:first-child {
   font-weight: 800;
 }
 
+.account-shell {
+  min-height: 100vh;
+}
+
+.auth-layout,
+.account-layout {
+  align-items: start;
+  display: grid;
+  gap: clamp(36px, 8vw, 112px);
+  grid-template-columns: minmax(0, 0.9fr) minmax(340px, 0.7fr);
+  margin: 0 auto;
+  max-width: 1120px;
+  padding: clamp(52px, 9vw, 116px) 24px;
+}
+
+.auth-intro,
+.account-heading {
+  max-width: 570px;
+}
+
+.auth-intro h1,
+.account-heading h1,
+.access-required h1 {
+  font-size: clamp(2.8rem, 6vw, 5.2rem);
+  letter-spacing: -0.065em;
+  line-height: 0.98;
+  margin-bottom: 25px;
+}
+
+.auth-intro > p:last-child,
+.account-heading > p:last-of-type,
+.access-required > p:not(.eyebrow) {
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+.auth-card,
+.account-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 22px 55px rgb(15 23 42 / 8%);
+  padding: clamp(24px, 5vw, 42px);
+}
+
+.auth-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-heading {
+  margin-bottom: 28px;
+}
+
+.form-heading h2 {
+  font-size: 1.65rem;
+  letter-spacing: -0.04em;
+  margin-bottom: 8px;
+}
+
+.form-heading p,
+.auth-card small,
+.form-footer {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.auth-card label,
+.auth-card legend {
+  color: #26354b;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.auth-card > label,
+.auth-card fieldset > label,
+.form-grid label {
+  display: block;
+  margin: 20px 0 8px;
+}
+
+.auth-card input,
+.auth-card select {
+  background: #fbfdff;
+  border: 1px solid #bbc8da;
+  border-radius: 10px;
+  color: var(--ink);
+  min-height: 48px;
+  padding: 0 13px;
+  width: 100%;
+}
+
+.auth-card input:focus,
+.auth-card select:focus {
+  border-color: var(--brand);
+  outline: 3px solid rgb(37 99 235 / 18%);
+}
+
+.auth-card small {
+  display: block;
+  font-size: 12px;
+  margin-top: 7px;
+}
+
+.auth-card fieldset {
+  border: 0;
+  margin: 28px 0 0;
+  padding: 0;
+}
+
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.choice-row label {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.choice-row input {
+  accent-color: var(--brand);
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  width: 16px;
+}
+
+.submit-button {
+  justify-content: center;
+  margin-top: 30px;
+  width: 100%;
+}
+
+.form-error {
+  background: #fff1f2;
+  border: 1px solid #fda4af;
+  border-radius: 10px;
+  color: #9f1239;
+  line-height: 1.5;
+  margin: 16px 0 0;
+  padding: 12px;
+}
+
+.form-footer {
+  font-size: 14px;
+  margin: 23px 0 0;
+  text-align: center;
+}
+
+.account-card dl {
+  display: grid;
+  gap: 22px;
+  margin: 0 0 30px;
+}
+
+.account-card dl div {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 18px;
+}
+
+.account-card dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 7px;
+  text-transform: uppercase;
+}
+
+.account-card dd {
+  font-weight: 700;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.notice,
+.success-message {
+  border-radius: 10px;
+  line-height: 1.6;
+  margin: 0;
+  padding: 14px;
+}
+
+.notice {
+  background: #eef4ff;
+  color: #1e3a8a;
+}
+
+.success-message {
+  background: #ecfdf3;
+  color: #166534;
+  margin-top: 16px;
+}
+
+.driver-form {
+  max-width: 540px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.back-link {
+  margin-top: 22px;
+}
+
+.access-required {
+  display: block;
+  max-width: 720px;
+}
+
 @media (max-width: 820px) {
   .hero,
   .platform-status {
@@ -493,6 +777,11 @@ footer span:first-child {
   .journey-number {
     margin-bottom: 42px;
   }
+
+  .auth-layout,
+  .account-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 520px) {
@@ -504,6 +793,16 @@ footer span:first-child {
     font-size: 0;
     min-width: 44px;
     padding: 0 17px;
+  }
+
+  .header-actions {
+    gap: 4px;
+  }
+
+  .text-button {
+    font-size: 0;
+    min-width: 44px;
+    justify-content: center;
   }
 
   .hero,
@@ -552,6 +851,22 @@ footer span:first-child {
     gap: 8px;
     padding-left: 16px;
     padding-right: 16px;
+  }
+
+  .auth-layout,
+  .account-layout {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .auth-card,
+  .account-card {
+    border-radius: 16px;
+    padding: 22px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
   }
 }
 

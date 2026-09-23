@@ -8,6 +8,14 @@ Canonical language for the ride-hailing domain. Delivery is a later context and 
 A person with credentials and one or more authorized roles.
 _Avoid_: Account, login
 
+**Credential**:
+The current proof used to authenticate a User. Password material is never treated as domain data outside the Identity boundary.
+_Avoid_: Password when the authentication state or storage concern is intended
+
+**Refresh Session**:
+An expiring, revocable authenticated session that can issue a new short-lived access credential.
+_Avoid_: Login, token when its durable lifecycle is intended
+
 **Customer**:
 A User who requests and pays for transportation.
 _Avoid_: Passenger when referring to the role, client
@@ -19,6 +27,10 @@ _Avoid_: Provider, courier in the ride context
 **Vehicle**:
 An approved means of transport assigned to a Driver.
 _Avoid_: Car when the service type may allow other vehicles
+
+**Driver Profile**:
+The Driver-owned review record required before operational eligibility can be evaluated.
+_Avoid_: Driver when referring to the User role rather than review state
 
 ## Ride
 

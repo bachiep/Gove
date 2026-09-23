@@ -13,4 +13,10 @@ describe('readAppConfig', () => {
     expect(config.API_HOST).toBe('127.0.0.1');
     expect(config.DATABASE_URL).toContain('@127.0.0.1:55432/gove');
   });
+
+  it('rejects the local authentication secrets in production', () => {
+    expect(() => readAppConfig({ NODE_ENV: 'production' })).toThrow(
+      'Production authentication secrets',
+    );
+  });
 });
