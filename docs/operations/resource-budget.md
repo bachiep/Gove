@@ -65,3 +65,9 @@ started from that state. Two long-lived Gove dev servers and a browser
 verification session were still owned by the IDE parent process. They must be
 stopped gracefully as exact project sessions before the next heavy verification
 pass; unrelated IDE, Docker, database, and user services remain out of scope.
+
+The recovery pass then stopped those exact Gove API/Web shells and the
+temporary Chrome Harness session gracefully. RAM availability rose to about
+7.5 GiB and swap fell to about 6.09 GiB, but the gate remained
+`stop-and-recover` because swap was still above 2 GiB and `/` remained at 93%.
+No build, full test suite, or agent was started after that snapshot.
