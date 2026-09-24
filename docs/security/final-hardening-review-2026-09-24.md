@@ -193,30 +193,28 @@ review before claiming public resilience.
 heartbeat, and message-limit behavior are covered locally; connection-flood
 behavior is not.
 
-### F-05 — Low — Cookie-origin checks accept a missing Origin header
+### F-05 — Low — Cookie-origin checks accepted a missing Origin header
 
 **Affected component:** `POST /api/v1/auth/refresh` and
 `POST /api/v1/auth/logout`.
 
-**Evidence:** `apps/api/src/identity/auth.controller.ts:144-151` rejects an
-Origin only when it is present and different from `WEB_ORIGIN`. A missing
-Origin is accepted. The refresh cookie is nevertheless `SameSite=Strict` and
-`HttpOnly` at lines 134-141. The same policy is documented as a hardening gap in
-`docs/security/realtime-and-rate-limit-review.md:86-96`.
+**Evidence:** `apps/api/src/identity/auth.controller.ts` now requires an exact
+match with `WEB_ORIGIN` for refresh and logout. A missing Origin and an
+untrusted supplied Origin are rejected before the refresh cookie is read. The
+refresh cookie remains `SameSite=Strict` and `HttpOnly` as independent controls.
 
-**Impact:** This weakens the exact-origin defense-in-depth boundary for
-cookie-authenticated commands. The code and cookie attributes do not establish
-that a browser request without an Origin is trusted. No exploit was attempted
-or demonstrated in this review.
+**Impact:** Before remediation, this weakened the exact-origin defense-in-depth
+boundary for cookie-authenticated commands. No exploit was attempted or
+demonstrated in this review.
 
-**Remediation:** Require an exact Origin for browser cookie flows, or split a
-documented native-client flow from the browser flow with an explicit
-authentication mechanism and threat model. Preserve SameSite and CSRF testing
-as independent controls.
+**Remediation:** Keep the exact Origin requirement for browser cookie flows. A
+future native flow must use explicit token authentication rather than weakening
+this cookie boundary. Preserve SameSite and CSRF testing as independent
+controls.
 
-**Validation status:** Partial. Cookie attributes and mismatched-origin
-rejection are visible in source and existing local review evidence; absent-
-Origin behavior is intentionally permissive and remains planned hardening.
+**Validation status:** Implemented and locally verified. The identity
+integration test proves the configured Origin succeeds while missing and
+untrusted Origins receive `AUTH_ORIGIN_FORBIDDEN` with HTTP 403.
 
 ### F-06 — Low — Swagger and readiness information are publicly routable
 

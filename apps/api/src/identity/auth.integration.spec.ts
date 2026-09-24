@@ -69,6 +69,22 @@ describe('Identity HTTP seam', () => {
     const cookie = cookieValue(login.headers['set-cookie']);
     expect(cookie).toContain('gove_refresh=');
 
+    const missingOrigin = await server.inject({
+      method: 'POST',
+      url: '/api/v1/auth/refresh',
+      headers: { cookie },
+    });
+    expect(missingOrigin.statusCode).toBe(403);
+    expect(missingOrigin.json().code).toBe('AUTH_ORIGIN_FORBIDDEN');
+
+    const unsupportedOrigin = await server.inject({
+      method: 'POST',
+      url: '/api/v1/auth/refresh',
+      headers: { cookie, origin: 'https://untrusted.example' },
+    });
+    expect(unsupportedOrigin.statusCode).toBe(403);
+    expect(unsupportedOrigin.json().code).toBe('AUTH_ORIGIN_FORBIDDEN');
+
     const me = await server.inject({
       method: 'GET',
       url: '/api/v1/auth/me',

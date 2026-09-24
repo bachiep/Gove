@@ -119,17 +119,21 @@ coverage proves the configured origin is accepted, an untrusted origin is
 rejected with 403, and a missing origin is accepted only through the documented
 native-client path. This does not provide multi-instance connection protection.
 
-### Low — Refresh and logout accept an absent Origin header
+### Low — Refresh and logout accepted an absent Origin header
 
-**Evidence.** The origin guard rejects a supplied origin only when it differs
-from `WEB_ORIGIN`; a missing header is accepted. The refresh cookie is
-`SameSite=Strict`, which reduces CSRF exposure but does not make this policy an
-exact browser-origin check.
+**Evidence.** The origin guard now requires an exact match with `WEB_ORIGIN` for
+both refresh and logout. A missing header and an untrusted supplied origin are
+rejected before the refresh cookie is read. The refresh cookie remains
+`SameSite=Strict` as a second CSRF control.
 
-**Impact.** This is a hardening gap in the cookie-authentication boundary.
+**Impact.** Before this fix, a cookie-authenticated request without an Origin
+header could bypass the intended browser-origin policy.
 
-**Remediation status: Planned.** Require an exact browser Origin for refresh
-and logout, or provide a separate, explicitly authenticated native-client flow.
+**Remediation status: Implemented and locally verified.** The identity
+integration test proves the configured origin succeeds while missing and
+untrusted origins receive `AUTH_ORIGIN_FORBIDDEN` with HTTP 403. Native clients
+are not part of the current PWA scope; a future native flow must use explicit
+token authentication rather than weakening this cookie boundary.
 
 ### Low — Swagger and readiness diagnostics are publicly proxied
 

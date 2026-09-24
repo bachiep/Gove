@@ -142,7 +142,7 @@ export class AuthController {
   }
 
   private assertAllowedOrigin(origin: string | undefined): void {
-    if (origin && origin !== this.config.WEB_ORIGIN) {
+    if (origin !== this.config.WEB_ORIGIN) {
       throw new ApiError(
         HttpStatus.FORBIDDEN,
         'AUTH_ORIGIN_FORBIDDEN',
