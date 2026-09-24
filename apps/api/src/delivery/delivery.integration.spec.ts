@@ -113,6 +113,39 @@ describe('Delivery HTTP seam', () => {
     expect(otherRead.json().code).toBe('DELIVERY_NOT_FOUND');
   });
 
+  it('lists only Customer-owned Deliveries', async () => {
+    const owner = await customerSession();
+    const other = await customerSession();
+    const created = await createDelivery(
+      owner.accessToken,
+      randomUUID(),
+      deliveryPayload('History'),
+    );
+    expect(created.statusCode).toBe(201);
+    const ownerList = await server.inject({
+      method: 'GET',
+      url: '/api/v1/deliveries',
+      headers: { authorization: `Bearer ${owner.accessToken}` },
+    });
+    expect(ownerList.statusCode).toBe(200);
+    expect(ownerList.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: created.json().id }),
+      ]),
+    );
+    const otherList = await server.inject({
+      method: 'GET',
+      url: '/api/v1/deliveries',
+      headers: { authorization: `Bearer ${other.accessToken}` },
+    });
+    expect(otherList.statusCode).toBe(200);
+    expect(otherList.json()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: created.json().id }),
+      ]),
+    );
+  });
+
   it('reserves one Driver and commits concurrent acceptance for a Delivery', async () => {
     const customer = await customerSession();
     const driver = await driverSession();

@@ -75,6 +75,14 @@ export class DeliveryController {
     return this.deliveries.findForCustomer(actor.id, deliveryId);
   }
 
+  @Get()
+  @ApiOperation({ summary: 'List Customer-owned Deliveries' })
+  listForCustomer(
+    @CurrentActor() actor: SessionActor,
+  ): Promise<DeliveryResponse[]> {
+    return this.deliveries.listForCustomer(actor.id);
+  }
+
   @Post(':deliveryId/match')
   @ApiOperation({
     summary: 'Start one idempotent matching attempt for a Delivery',

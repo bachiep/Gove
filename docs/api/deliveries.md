@@ -25,6 +25,11 @@ Reusing it with a different request returns `409 IDEMPOTENCY_KEY_REUSED`.
 Requires the Customer owner. A Delivery that does not exist or is not owned by
 the caller returns `404 DELIVERY_NOT_FOUND`; this avoids ownership disclosure.
 
+### `GET /api/v1/deliveries`
+
+Requires a Customer bearer token. It returns only Deliveries owned by that
+Customer, newest first, using the same privacy-safe response projection.
+
 ### `POST /api/v1/deliveries/:deliveryId/match`
 
 Requires the Customer owner and an `Idempotency-Key`. It transitions a

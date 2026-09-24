@@ -70,6 +70,10 @@ export class DeliveryService {
     );
   }
 
+  listForCustomer(customerUserId: string): Promise<DeliveryResponse[]> {
+    return this.repository.listForCustomer(customerUserId);
+  }
+
   async findForDriver(
     driverUserId: string,
     deliveryId: string,

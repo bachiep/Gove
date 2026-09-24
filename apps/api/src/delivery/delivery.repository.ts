@@ -193,6 +193,18 @@ export class DeliveryRepository {
     };
   }
 
+  async listForCustomer(customerUserId: string): Promise<DeliveryResponse[]> {
+    const result = await this.database.query<DeliveryDetailRow>(
+      `SELECT id, state, version, pickup_label,
+              ST_X(pickup_location::geometry) AS pickup_longitude, ST_Y(pickup_location::geometry) AS pickup_latitude,
+              dropoff_label, ST_X(dropoff_location::geometry) AS dropoff_longitude, ST_Y(dropoff_location::geometry) AS dropoff_latitude,
+              recipient_display_name, parcel_description, declared_weight_grams, created_at
+       FROM delivery.deliveries WHERE customer_user_id = $1 ORDER BY created_at DESC, id DESC`,
+      [customerUserId],
+    );
+    return result.rows.map(toDeliveryResponse);
+  }
+
   async findForDriver(
     driverUserId: string,
     deliveryId: string,
