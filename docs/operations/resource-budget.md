@@ -56,3 +56,12 @@ keep working normally, while duplicate heavy builds/tests remain serialized.
 Later that day, root reached 98% during repeated Docker builds. The operator
 approved `docker builder prune -f`, which reclaimed 2.508 GB and returned root
 to 93%; the disk gate therefore remains `guarded` until more space is freed.
+
+At the latest recovery check on 2026-09-25, Docker build cache was already
+reclaimed, but the machine still reported approximately 6.4 GiB available RAM,
+6.71 GiB swap in use, and 3.7 GiB free on `/` (93%). The resource script
+therefore returned `stop-and-recover`; no build, full test suite, or agent was
+started from that state. Two long-lived Gove dev servers and a browser
+verification session were still owned by the IDE parent process. They must be
+stopped gracefully as exact project sessions before the next heavy verification
+pass; unrelated IDE, Docker, database, and user services remain out of scope.
