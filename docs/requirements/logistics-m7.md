@@ -37,14 +37,17 @@ tracking are not required for this first Delivery slice.
 
 ## Implementation status
 
-| Requirement | Current status                                                                                                            |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------- |
-| L-01        | Backend create/read/history and idempotency are tested; Customer creation UI remains.                                     |
-| L-02        | Separate schema, transitions, versioning, receipts, outbox, and ADR are implemented.                                      |
-| L-03        | Shared Driver work state and Delivery contention tests exist; an explicit Trip-versus-Delivery race gate remains.         |
-| L-04–05     | Driver lifecycle, bounded custody/proof, and Driver Console are implemented and tested locally; browser evidence remains. |
-| L-06        | Customer history and Driver offer/current-assignment HTTP projections exist; Delivery realtime remains.                   |
-| L-07–08     | Replay and ownership tests exist for implemented commands and projections.                                                |
+| Requirement | Current status                                                                                                                                                                                            |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L-01        | Backend create/read/history and idempotency are tested; Customer creation UI is implemented and its create/history flow was observed locally in a browser.                                                |
+| L-02        | Separate schema, transitions, versioning, receipts, outbox, and ADR are implemented.                                                                                                                      |
+| L-03        | Shared Driver work state and an explicit concurrent Trip-versus-Delivery matching test prove that one Driver cannot receive both active work types.                                                       |
+| L-04–05     | Driver lifecycle, bounded custody/proof, and Driver Console are implemented and tested locally; local synthetic browser evidence now covers custody through `DELIVERED`, while GPS/reconnect remain open. |
+| L-06        | Customer history, Driver offer/current-assignment projections, and authorized Delivery WebSocket snapshot/event projection are implemented and integration-tested.                                        |
+| L-07–08     | Replay and ownership tests exist for implemented commands and projections.                                                                                                                                |
 
-M7 exits only when Customer UI, rebuildable realtime status, cross-domain
-contention evidence, and browser acceptance are complete.
+M7 implementation is complete for Customer UI, rebuildable realtime status,
+and cross-domain contention. The local synthetic browser run now covers the
+full Customer-and-Driver custody lifecycle; the remaining verification gates
+are GPS permission, reconnect, accessibility, and external deployment
+boundaries, as recorded in the technical evidence record.

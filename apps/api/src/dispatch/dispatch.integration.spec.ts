@@ -16,6 +16,9 @@ describe('Dispatch HTTP seam', () => {
   beforeAll(async () => {
     app = await createApplication();
     await app.init();
+    // These integration tests invoke the expiry sweep deterministically via
+    // runOnce(); prevent the background interval from racing the fixtures.
+    app.get(DispatchExpiryWorker).onModuleDestroy();
     server = app.getHttpAdapter().getInstance();
     database = app.get(DatabaseService);
   });
@@ -109,6 +112,14 @@ describe('Dispatch HTTP seam', () => {
       id: tripId,
       state: 'DRIVER_TO_PICKUP',
       driverId: driver.actorId,
+      pickup: {
+        latitude: 21.0285,
+        longitude: 105.8048,
+      },
+      dropoff: {
+        latitude: 21.033,
+        longitude: 105.835,
+      },
     });
 
     const currentWorkState = await server.inject({
@@ -121,6 +132,44 @@ describe('Dispatch HTTP seam', () => {
       driverId: driver.actorId,
       state: 'TO_PICKUP',
     });
+  });
+
+  it('replays the original acceptance response after the Trip advances', async () => {
+    const customer = await registerAndLogin(
+      'CUSTOMER',
+      'Acceptance Replay Customer',
+    );
+    const driver = await registerAndLogin('DRIVER', 'Acceptance Replay Driver');
+    await setAllAvailableDriversOffline();
+    await approveDriver(driver.actorId, 'dispatch-acceptance-replay');
+    await sendLocationAndGoOnline(driver.accessToken);
+
+    const tripId = await createRequestedTrip(customer.accessToken);
+    const matching = await startMatching(customer.accessToken, tripId);
+    const offerId = matching.json().offer.id as string;
+    const acceptanceKey = randomUUID();
+    const accepted = await acceptOffer(
+      driver.accessToken,
+      offerId,
+      acceptanceKey,
+    );
+    expect(accepted.statusCode).toBe(201);
+
+    const arrived = await transitionTrip(
+      driver.accessToken,
+      tripId,
+      'arrive',
+      randomUUID(),
+    );
+    expect(arrived.statusCode).toBe(201);
+
+    const replay = await acceptOffer(
+      driver.accessToken,
+      offerId,
+      acceptanceKey,
+    );
+    expect(replay.statusCode).toBe(201);
+    expect(replay.json()).toEqual(accepted.json());
   });
 
   it('expires an offer atomically and releases the Driver reservation', async () => {
@@ -213,6 +262,261 @@ describe('Dispatch HTTP seam', () => {
       reservation_status: 'EXPIRED',
       work_state: 'AVAILABLE',
       trip_state: 'NO_DRIVER_AVAILABLE',
+    });
+  });
+
+  it('releases a due Offer without reopening a terminal Trip', async () => {
+    const customer = await registerAndLogin(
+      'CUSTOMER',
+      'Terminal Expiry Customer',
+    );
+    const driver = await registerAndLogin('DRIVER', 'Terminal Expiry Driver');
+    await setAllAvailableDriversOffline();
+    await approveDriver(driver.actorId, 'dispatch-terminal-expiry');
+    await sendLocationAndGoOnline(driver.accessToken);
+
+    const tripId = await createRequestedTrip(customer.accessToken);
+    const matching = await startMatching(customer.accessToken, tripId);
+    expect(matching.statusCode).toBe(201);
+    const offerId = matching.json().offer.id as string;
+
+    // Simulate a recovered terminal Trip whose pending Offer was not swept
+    // before the terminal state became durable.
+    await database.query(
+      `UPDATE trip.trips SET state = 'CANCELLED', updated_at = now()
+       WHERE id = $1`,
+      [tripId],
+    );
+    await database.query(
+      `UPDATE dispatch.trip_offers
+       SET offered_at = now() - INTERVAL '1 minute',
+           expires_at = now() - INTERVAL '1 second'
+       WHERE id = $1`,
+      [offerId],
+    );
+
+    const worker = app.get(DispatchExpiryWorker);
+    expect(await worker.runOnce()).toBe(1);
+
+    const state = await database.query<{
+      trip_state: string;
+      offer_status: string;
+      reservation_status: string;
+      work_state: string;
+      expired_events: string;
+    }>(
+      `SELECT t.state AS trip_state,
+              o.status AS offer_status,
+              r.status AS reservation_status,
+              ws.work_state,
+              (SELECT count(*)::text FROM trip.outbox_events
+               WHERE trip_id = t.id AND event_type = 'dispatch.offer.expired') AS expired_events
+       FROM trip.trips t
+       JOIN dispatch.trip_offers o ON o.trip_id = t.id
+       JOIN dispatch.driver_reservations r ON r.id = o.reservation_id
+       JOIN dispatch.driver_work_states ws ON ws.driver_user_id = o.driver_user_id
+       WHERE t.id = $1 AND o.id = $2`,
+      [tripId, offerId],
+    );
+    expect(state.rows[0]).toEqual({
+      trip_state: 'CANCELLED',
+      offer_status: 'EXPIRED',
+      reservation_status: 'EXPIRED',
+      work_state: 'AVAILABLE',
+      expired_events: '1',
+    });
+  });
+
+  it('skips a stale unmatchable Offer without preventing another due Offer from expiring', async () => {
+    const firstCustomer = await registerAndLogin(
+      'CUSTOMER',
+      'Stale Expiry First Customer',
+    );
+    const secondCustomer = await registerAndLogin(
+      'CUSTOMER',
+      'Stale Expiry Second Customer',
+    );
+    const firstDriver = await registerAndLogin(
+      'DRIVER',
+      'Stale Expiry First Driver',
+    );
+    const secondDriver = await registerAndLogin(
+      'DRIVER',
+      'Stale Expiry Second Driver',
+    );
+    await setAllAvailableDriversOffline();
+    await approveDriver(firstDriver.actorId, 'stale-expiry-first');
+    await approveDriver(secondDriver.actorId, 'stale-expiry-second');
+    await sendLocationAndGoOnline(firstDriver.accessToken);
+    await sendLocationAndGoOnline(secondDriver.accessToken);
+
+    const firstTripId = await createRequestedTrip(firstCustomer.accessToken);
+    const firstMatch = await startMatching(
+      firstCustomer.accessToken,
+      firstTripId,
+    );
+    const secondTripId = await createRequestedTrip(secondCustomer.accessToken);
+    const secondMatch = await startMatching(
+      secondCustomer.accessToken,
+      secondTripId,
+    );
+    const firstOfferId = firstMatch.json().offer.id as string;
+    const secondOfferId = secondMatch.json().offer.id as string;
+
+    await database.query(
+      `UPDATE dispatch.trip_offers
+       SET offered_at = now() - INTERVAL '1 minute',
+           expires_at = now() - INTERVAL '1 second'
+       WHERE id IN ($1, $2)`,
+      [firstOfferId, secondOfferId],
+    );
+    // This shape is stale recovery data: a committed reservation and a Driver
+    // already en route must never cause expiry to mutate only the Offer or
+    // allocate another Driver. It requires explicit reconciliation, while
+    // the rest of the batch must still make progress.
+    await database.query(
+      `UPDATE dispatch.driver_reservations
+       SET status = 'COMMITTED', resolved_at = now(),
+           resolution_reason = 'RECOVERY_COMMITTED'
+       WHERE id = (SELECT reservation_id FROM dispatch.trip_offers WHERE id = $1)`,
+      [firstOfferId],
+    );
+    await database.query(
+      `UPDATE dispatch.driver_work_states
+       SET work_state = 'TO_PICKUP', current_trip_id = $2,
+           state_version = state_version + 1,
+           state_changed_at = now(), updated_at = now()
+       WHERE driver_user_id = (
+         SELECT driver_user_id FROM dispatch.trip_offers WHERE id = $1
+       )`,
+      [firstOfferId, firstTripId],
+    );
+
+    const worker = app.get(DispatchExpiryWorker);
+    expect(await worker.runOnce()).toBe(1);
+
+    const stale = await database.query<{
+      offer_status: string;
+      reservation_status: string;
+      work_state: string;
+      trip_state: string;
+      expired_events: string;
+    }>(
+      `SELECT o.status AS offer_status,
+              r.status AS reservation_status,
+              ws.work_state,
+              t.state AS trip_state,
+              (SELECT count(*)::text FROM trip.outbox_events
+               WHERE trip_id = t.id
+                 AND event_type = 'dispatch.offer.expired') AS expired_events
+       FROM dispatch.trip_offers o
+       JOIN dispatch.driver_reservations r ON r.id = o.reservation_id
+       JOIN dispatch.driver_work_states ws ON ws.driver_user_id = o.driver_user_id
+       JOIN trip.trips t ON t.id = o.trip_id
+       WHERE o.id = $1`,
+      [firstOfferId],
+    );
+    expect(stale.rows[0]).toEqual({
+      offer_status: 'PENDING',
+      reservation_status: 'COMMITTED',
+      work_state: 'TO_PICKUP',
+      trip_state: 'MATCHING',
+      expired_events: '0',
+    });
+
+    const validOffer = await database.query<{
+      offer_status: string;
+      trip_state: string;
+    }>(
+      `SELECT o.status AS offer_status, t.state AS trip_state
+       FROM dispatch.trip_offers o
+       JOIN trip.trips t ON t.id = o.trip_id
+       WHERE o.id = $1`,
+      [secondOfferId],
+    );
+    expect(validOffer.rows[0]).toEqual({
+      offer_status: 'EXPIRED',
+      trip_state: 'NO_DRIVER_AVAILABLE',
+    });
+  });
+
+  it('records each expiry across successive reassignment attempts', async () => {
+    const customer = await registerAndLogin(
+      'CUSTOMER',
+      'Repeated Expiry Customer',
+    );
+    const drivers = await Promise.all(
+      ['One', 'Two', 'Three'].map(async (suffix) => {
+        const driver = await registerAndLogin(
+          'DRIVER',
+          `Repeated Expiry Driver ${suffix}`,
+        );
+        await approveDriver(
+          driver.actorId,
+          `dispatch-repeated-expiry-${suffix}`,
+        );
+        await sendLocationAndGoOnline(driver.accessToken);
+        return driver;
+      }),
+    );
+    await setAllAvailableDriversOffline();
+    await waitForLocationWindow();
+    for (const driver of drivers) {
+      await sendLocationAndGoOnline(driver.accessToken);
+    }
+
+    const tripId = await createRequestedTrip(customer.accessToken);
+    const firstMatch = await startMatching(customer.accessToken, tripId);
+    expect(firstMatch.statusCode).toBe(201);
+
+    await database.query(
+      `UPDATE dispatch.trip_offers
+       SET offered_at = now() - INTERVAL '1 minute',
+           expires_at = now() - INTERVAL '1 second'
+       WHERE trip_id = $1 AND status = 'PENDING'`,
+      [tripId],
+    );
+    await database.query(
+      `UPDATE dispatch.trip_offers
+       SET expires_at = greatest(expires_at, now() + INTERVAL '1 hour')
+       WHERE trip_id <> $1 AND status = 'PENDING'`,
+      [tripId],
+    );
+
+    const worker = app.get(DispatchExpiryWorker);
+    expect(await worker.runOnce()).toBe(1);
+
+    const secondOffer = await database.query<{ id: string }>(
+      `SELECT id FROM dispatch.trip_offers
+       WHERE trip_id = $1 AND status = 'PENDING'
+       ORDER BY attempt_number DESC
+       LIMIT 1`,
+      [tripId],
+    );
+    expect(secondOffer.rows[0]).toBeDefined();
+    await database.query(
+      `UPDATE dispatch.trip_offers
+       SET offered_at = now() - INTERVAL '1 minute',
+           expires_at = now() - INTERVAL '1 second'
+       WHERE id = $1`,
+      [secondOffer.rows[0]?.id],
+    );
+
+    expect(await worker.runOnce()).toBe(1);
+
+    const outboxEvents = await database.query<{
+      event_type: string;
+      count: string;
+    }>(
+      `SELECT event_type, count(*)::text AS count
+       FROM trip.outbox_events
+       WHERE trip_id = $1 AND event_type = 'dispatch.offer.expired'
+       GROUP BY event_type`,
+      [tripId],
+    );
+    expect(outboxEvents.rows[0]).toEqual({
+      event_type: 'dispatch.offer.expired',
+      count: '2',
     });
   });
 
@@ -526,8 +830,8 @@ describe('Dispatch HTTP seam', () => {
       url: '/api/v1/drivers/me/location',
       headers: { authorization: `Bearer ${accessToken}` },
       payload: {
-        latitude: 10.76,
-        longitude: 106.68,
+        latitude: 21.0285,
+        longitude: 105.8048,
         accuracyMeters: 10,
         source: 'SIMULATOR',
         sequenceNumber: 1,
@@ -553,6 +857,10 @@ describe('Dispatch HTTP seam', () => {
     );
   }
 
+  async function waitForLocationWindow(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 3_050));
+  }
+
   async function createRequestedTrip(accessToken: string): Promise<string> {
     const quote = await server.inject({
       method: 'POST',
@@ -564,13 +872,13 @@ describe('Dispatch HTTP seam', () => {
       payload: {
         pickup: {
           label: 'Dispatch pickup',
-          latitude: 10.76,
-          longitude: 106.68,
+          latitude: 21.0285,
+          longitude: 105.8048,
         },
         dropoff: {
           label: 'Dispatch dropoff',
-          latitude: 10.78,
-          longitude: 106.7,
+          latitude: 21.033,
+          longitude: 105.835,
         },
         serviceType: 'MOTORBIKE_STANDARD',
       },

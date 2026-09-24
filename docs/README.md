@@ -1,53 +1,85 @@
 # Documentation Register
 
 Status: Active
-Last updated: 2026-09-24
+Last updated: 2026-09-25
 
 Documentation records intended behavior and verified evidence. It must distinguish what is planned from what exists in code and runtime.
 
 ## Registers and plans
 
-| Document                                                                | Purpose                                           | Status         |
-| ----------------------------------------------------------------------- | ------------------------------------------------- | -------------- |
-| [Project charter](project/charter.md)                                   | Goal, constraints, success conditions             | Accepted       |
-| [Roadmap](project/roadmap.md)                                           | Milestones and gates                              | Active         |
-| [Risk register](project/risk-register.md)                               | Active delivery and technical risks               | Active         |
-| [Technical debt register](project/technical-debt-register.md)           | Deliberate deferrals and removal triggers         | Active         |
-| [Known limitations](project/known-limitations.md)                       | Current capability and evidence boundaries        | Active         |
-| [Open questions](project/open-questions.md)                             | Non-blocking decisions requiring later evidence   | Active         |
-| [Completion definition](project/completion-definition.md)               | Frozen scope and the meaning of 100%              | Accepted       |
-| [Completion plan](project/completion-plan.md)                           | Ordered remaining work and exit gates             | Active         |
-| [Acceptance matrix](project/acceptance-matrix.md)                       | Requirement-to-evidence traceability              | Active         |
-| [MVP requirements](requirements/mvp.md)                                 | Functional and non-functional baseline            | Accepted       |
-| [M7 logistics requirements](requirements/logistics-m7.md)               | Delivery extension baseline                       | Accepted       |
-| [Trip lifecycle](domain/trip-lifecycle.md)                              | State machines and invariants                     | Tested         |
-| [Delivery lifecycle](domain/delivery-lifecycle.md)                      | Separate parcel custody state machine             | Designed       |
-| [Architecture overview](architecture/overview.md)                       | Runtime shape, modules, and data flow             | Designed       |
-| [Data ownership](architecture/data-ownership.md)                        | Authoritative writers and projections             | Designed       |
-| [Failure model](architecture/failure-model.md)                          | Dependency failures and expected behavior         | Designed       |
-| [Testing strategy](testing/strategy.md)                                 | Test levels and evidence gates                    | Accepted       |
-| [Local development](operations/local-development.md)                    | Reproducible local environment                    | Tested locally |
-| [Demo/staging deployment](operations/demo-deployment.md)                | Compose deployment and TLS boundary               | Implemented    |
-| [Backup and restore](operations/backup-and-restore.md)                  | Safe backup and clean-database restore procedure  | Implemented    |
-| [Demo runbook](operations/demo-runbook.md)                              | Repeatable final demonstration and evidence       | Designed       |
-| [API performance baseline](performance/baseline-2026-09-24.md)          | Reproducible local load measurement               | Measured       |
-| [Vertical slice 01](implementation/vertical-slice-01.md)                | First implementation sequence                     | Accepted       |
-| [Vertical slice 02](implementation/vertical-slice-02.md)                | Quote, durable Ride Request, and customer PWA     | Tested locally |
-| [Vertical slice 03](implementation/vertical-slice-03.md)                | Dispatch, reservation, and acceptance boundary    | Tested locally |
-| [Vertical slice 04](implementation/vertical-slice-04.md)                | Authenticated realtime Trip updates               | Tested locally |
-| [Vertical slice 05](implementation/vertical-slice-05.md)                | Trip completion and settlement                    | Tested locally |
-| [Vertical slice 06](implementation/vertical-slice-06.md)                | Delivery lifecycle and remaining UI/realtime      | Partial        |
-| [Product design system](design/design-system.md)                        | UI tokens and interaction rules                   | Designed       |
-| [Authentication API](api/authentication.md)                             | Auth/session and driver self-service contracts    | Tested locally |
-| [Ride request API](api/ride-requests.md)                                | M2 quote and Trip creation contracts              | Tested locally |
-| [Dispatch API](api/dispatch.md)                                         | M3 location, matching, offers, and acceptance     | Tested locally |
-| [Realtime API](api/realtime.md)                                         | WebSocket Trip snapshots, events, and locations   | Tested locally |
-| [Completion and settlement API](api/completion-and-settlement.md)       | Driver completion, payment simulator, and history | Tested locally |
-| [Delivery API](api/deliveries.md)                                       | Delivery request and ownership contracts          | Partial        |
-| [Authentication boundary](security/authentication-and-authorization.md) | Implemented identity controls and limitations     | Tested locally |
-| [Identity and driver data](data/identity-driver-schema.md)              | M1 ownership, schema, and migration rules         | Implemented    |
-| [Domain data schema](data/domain-schema.md)                             | Ride, dispatch, payment, and Delivery persistence | Implemented    |
-| [Report evidence pack](report/README.md)                                | Diagrams, SQL, evidence, and report chapter map   | Active         |
+| Document                                                                             | Purpose                                                                            | Status               |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- | -------------------- |
+| [Project charter](project/charter.md)                                                | Goal, constraints, success conditions                                              | Accepted             |
+| [Roadmap](project/roadmap.md)                                                        | Milestones and gates                                                               | Active               |
+| [Risk register](project/risk-register.md)                                            | Active delivery and technical risks                                                | Active               |
+| [Technical debt register](project/technical-debt-register.md)                        | Deliberate deferrals and removal triggers                                          | Active               |
+| [Known limitations](project/known-limitations.md)                                    | Current capability and evidence boundaries                                         | Active               |
+| [Open questions](project/open-questions.md)                                          | Non-blocking decisions requiring later evidence                                    | Active               |
+| [Completion definition](project/completion-definition.md)                            | Frozen scope and the meaning of 100%                                               | Accepted             |
+| [Completion plan](project/completion-plan.md)                                        | Ordered remaining work and exit gates                                              | Active               |
+| [Acceptance matrix](project/acceptance-matrix.md)                                    | Requirement-to-evidence traceability                                               | Active               |
+| [MVP requirements](requirements/mvp.md)                                              | Functional and non-functional baseline                                             | Accepted             |
+| [M7 logistics requirements](requirements/logistics-m7.md)                            | Delivery extension baseline                                                        | Accepted             |
+| [Trip lifecycle](domain/trip-lifecycle.md)                                           | State machines and invariants                                                      | Tested               |
+| [Delivery lifecycle](domain/delivery-lifecycle.md)                                   | Separate parcel custody state machine                                              | Tested locally       |
+| [Architecture overview](architecture/overview.md)                                    | Runtime shape, modules, and data flow                                              | Designed             |
+| [Data ownership](architecture/data-ownership.md)                                     | Authoritative writers and projections                                              | Designed             |
+| [Failure model](architecture/failure-model.md)                                       | Dependency failures and expected behavior                                          | Designed             |
+| [Map, live location, and ETA](architecture/map-and-eta.md)                           | Staged MapLibre renderer, Leaflet fallback, GPS tracking, routing, and ETA roadmap | Implemented locally  |
+| [Testing strategy](testing/strategy.md)                                              | Test levels and evidence gates                                                     | Accepted             |
+| [Local development](operations/local-development.md)                                 | Reproducible local environment                                                     | Tested locally       |
+| [Demo/staging deployment](operations/demo-deployment.md)                             | Compose deployment and TLS boundary                                                | Implemented          |
+| [Backup and restore](operations/backup-and-restore.md)                               | Safe backup and clean-database restore procedure                                   | Implemented          |
+| [Demo runbook](operations/demo-runbook.md)                                           | Repeatable final demonstration and evidence                                        | Designed             |
+| [API performance baseline](performance/baseline-2026-09-24.md)                       | Reproducible local load measurement                                                | Measured             |
+| [Vertical slice 01](implementation/vertical-slice-01.md)                             | First implementation sequence                                                      | Accepted             |
+| [Vertical slice 02](implementation/vertical-slice-02.md)                             | Quote, durable Ride Request, and customer PWA                                      | Tested locally       |
+| [Vertical slice 03](implementation/vertical-slice-03.md)                             | Dispatch, reservation, and acceptance boundary                                     | Tested locally       |
+| [Vertical slice 04](implementation/vertical-slice-04.md)                             | Authenticated realtime Trip updates                                                | Tested locally       |
+| [Vertical slice 05](implementation/vertical-slice-05.md)                             | Trip completion and settlement                                                     | Tested locally       |
+| [Vertical slice 06](implementation/vertical-slice-06.md)                             | Delivery lifecycle, Customer PWA, and realtime                                     | Tested locally       |
+| [Product design system](design/design-system.md)                                     | UI tokens and interaction rules                                                    | Designed             |
+| [Authentication API](api/authentication.md)                                          | Auth/session and driver self-service contracts                                     | Tested locally       |
+| [Ride request API](api/ride-requests.md)                                             | M2 quote and Trip creation contracts                                               | Tested locally       |
+| [Dispatch API](api/dispatch.md)                                                      | M3 location, matching, offers, and acceptance                                      | Tested locally       |
+| [Realtime API](api/realtime.md)                                                      | WebSocket Trip snapshots, events, and locations                                    | Tested locally       |
+| [Completion and settlement API](api/completion-and-settlement.md)                    | Driver completion, payment providers, and history                                  | Tested locally       |
+| [Payment provider baseline](payments/provider-integration-baseline.md)               | `SIMULATOR` plus `MOMO`/`SEPAY` pending boundary                                   | Implemented baseline |
+| [Operator diagnostics API](api/operator-diagnostics.md)                              | Trip diagnostics and Driver onboarding review                                      | Tested locally       |
+| [Delivery API](api/deliveries.md)                                                    | Customer/Driver Delivery UI, ownership, and realtime                               | Tested locally       |
+| [Browser acceptance evidence — 2026-09-24](testing/browser-acceptance-2026-09-24.md) | Local browser scope for Customer Delivery                                          | Tested locally       |
+| [Authentication boundary](security/authentication-and-authorization.md)              | Implemented identity controls and limitations                                      | Tested locally       |
+| [Identity and driver data](data/identity-driver-schema.md)                           | M1 ownership, schema, and migration rules                                          | Implemented          |
+| [Domain data schema](data/domain-schema.md)                                          | Ride, dispatch, payment, and Delivery persistence                                  | Implemented          |
+| [Report evidence pack](report/README.md)                                             | Diagrams, SQL, evidence, and report chapter map                                    | Active               |
+| [Competitive benchmark](report/competitive-benchmark.md)                             | Objective comparison with mature ride-hailing products and Gove parity roadmap     | Active               |
+
+## PostgreSQL migration baseline
+
+The migration runner records applied files in `public.schema_migrations` and
+serializes runs with a PostgreSQL advisory lock. The current repository baseline
+contains these ordered migrations; a clean local database must contain all
+fourteen versions after a successful migration run.
+
+| Version | Migration                          | Durable scope                                                             |
+| ------- | ---------------------------------- | ------------------------------------------------------------------------- |
+| `0001`  | `foundation`                       | PostGIS and application schemas                                           |
+| `0002`  | `identity-auth`                    | users, roles, sessions, and idempotency support                           |
+| `0003`  | `driver-profile-and-vehicle`       | Driver profiles and vehicles                                              |
+| `0004`  | `pricing-and-trip-write-model`     | fare rules, Trip write model, transitions, and outbox                     |
+| `0005`  | `dispatch-foundation`              | latest Driver locations and shared Driver work state                      |
+| `0006`  | `completion-and-payment`           | Trip completion, payment simulation, and settlement records               |
+| `0007`  | `delivery-foundation`              | independent Delivery aggregate, transitions, receipts, and outbox         |
+| `0008`  | `delivery-dispatch`                | Delivery reservations, offers, assignments, and shared work-state binding |
+| `0009`  | `delivery-custody-and-proof`       | pickup custody confirmation and recipient handoff proof                   |
+| `0010`  | `operator-diagnostic-audit`        | audited Operator diagnostic-review actions                                |
+| `0011`  | `ride-cancellation`                | Customer cancellation audit, command receipts, and cancellation outbox    |
+| `0012`  | `driver-onboarding-approval-audit` | Vehicle review metadata and Operator onboarding approval history          |
+| `0013`  | `payment-provider-baseline`        | Payment provider selection and `SIMULATOR`/`MOMO`/`SEPAY` constraint      |
+| `0014`  | `operator-onboarding-idempotency`  | Replay-safe Operator onboarding mutations and receipts                    |
+
+The presence of these migrations documents repository state only. It is not
+evidence that any external environment has been migrated or deployed.
 
 ## Architecture decisions
 

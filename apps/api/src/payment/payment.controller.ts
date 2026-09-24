@@ -36,7 +36,7 @@ export class PaymentController {
 
   @Post('trips/:tripId/capture')
   @Roles('CUSTOMER')
-  @ApiOperation({ summary: 'Capture the final Fare through the simulator' })
+  @ApiOperation({ summary: 'Create a final Fare Payment Attempt' })
   async capture(
     @CurrentActor() actor: SessionActor,
     @Param() params: unknown,
@@ -61,7 +61,11 @@ export class PaymentController {
       tripId: parseInput(paymentTripParamsSchema, params).tripId,
       idempotencyKey,
       correlationId,
-      simulationOutcome: input.simulationOutcome,
+      provider: input.provider,
+      simulationOutcome:
+        input.provider === 'SIMULATOR'
+          ? (input.simulationOutcome ?? 'SUCCEEDED')
+          : undefined,
     });
   }
 

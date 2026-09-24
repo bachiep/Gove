@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 import type {
+  FareQuoteRoute,
   FareQuoteResponse,
   RideLocation,
   ServiceType,
@@ -40,8 +41,15 @@ export interface CreateFareQuoteRecord {
   dropoff: RideLocation;
   distanceMeters: number;
   durationSeconds: number;
+  route: FareQuoteRoute;
   requestedSurgeMultiplierBps: number;
   expiresAt: Date;
+}
+
+export interface FareQuoteReceiptLookup {
+  customerUserId: string;
+  idempotencyKey: string;
+  requestFingerprint: Buffer;
 }
 
 @Injectable()
@@ -49,6 +57,26 @@ export class PricingRepository {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
+
+  async findFareQuoteReceipt(
+    input: FareQuoteReceiptLookup,
+  ): Promise<FareQuoteResponse | null> {
+    const result = await this.database.query<{
+      request_fingerprint: Buffer;
+      response_body: FareQuoteResponse;
+    }>(
+      `SELECT request_fingerprint, response_body
+       FROM pricing.command_receipts
+       WHERE actor_user_id = $1 AND operation = 'CREATE_FARE_QUOTE' AND idempotency_key = $2`,
+      [input.customerUserId, input.idempotencyKey],
+    );
+    const receipt = result.rows[0];
+    if (!receipt) return null;
+    if (!sameDigest(receipt.request_fingerprint, input.requestFingerprint)) {
+      throw new PricingCommandError('IDEMPOTENCY_KEY_REUSED');
+    }
+    return receipt.response_body;
+  }
 
   async createFareQuote(
     input: CreateFareQuoteRecord,
@@ -153,6 +181,7 @@ export class PricingRepository {
         currency: fare.currency,
         totalFareMinor: fare.totalFareMinor,
         expiresAt: (created.rows[0] as FareQuoteRow).expires_at.toISOString(),
+        route: input.route,
       };
       await executor.query(
         `INSERT INTO pricing.command_receipts

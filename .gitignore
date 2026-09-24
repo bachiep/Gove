@@ -16,7 +16,13 @@ Thumbs.db
 .vscode/
 
 .agy-bridge-artifacts/
+.codex-tmp/
 artifacts/backups/
+
+# OSRM extracts and generated graph files stay in an external Docker volume.
+*.osm.pbf
+*.osrm
+*.osrm.*
 
 node_modules/
 dist/

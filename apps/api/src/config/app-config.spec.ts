@@ -19,4 +19,29 @@ describe('readAppConfig', () => {
       'Production authentication secrets',
     );
   });
+
+  it('accepts a safe optional OSRM base URL', () => {
+    const config = readAppConfig({
+      ROUTING_OSRM_BASE_URL: 'http://127.0.0.1:5000/osrm',
+    });
+
+    expect(config.ROUTING_OSRM_BASE_URL).toBe('http://127.0.0.1:5000/osrm');
+  });
+
+  it('treats an empty Compose override as the unset fallback mode', () => {
+    const config = readAppConfig({ ROUTING_OSRM_BASE_URL: '' });
+
+    expect(config.ROUTING_OSRM_BASE_URL).toBeUndefined();
+  });
+
+  it.each([
+    'ftp://router.internal',
+    'https://user:password@router.internal',
+    'https://router.internal?profile=driving',
+    'https://router.internal#route',
+  ])('rejects an unsafe OSRM base URL: %s', (baseUrl) => {
+    expect(() => readAppConfig({ ROUTING_OSRM_BASE_URL: baseUrl })).toThrow(
+      'ROUTING_OSRM_BASE_URL',
+    );
+  });
 });

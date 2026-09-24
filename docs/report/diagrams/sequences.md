@@ -81,8 +81,12 @@ sequenceDiagram
     DeliveryAPI-->>CustomerClient: Authoritative DELIVERED status
 ```
 
-Backend và Driver Console đã có. UI tạo Delivery và WebSocket projection cho
-Customer còn thiếu; trạng thái cuối hiện có thể đọc qua HTTP/history.
+Customer PWA đã có UI tạo Delivery, history/detail và WebSocket projection qua
+`delivery.snapshot`/`delivery.event`; HTTP record vẫn là authority khi refresh
+hoặc reconnect. Browser evidence local hiện xác nhận create,
+`NO_DRIVER_AVAILABLE`, history/detail và synthetic Customer-and-Driver custody
+lifecycle đến `DELIVERED`; GPS permission và reconnect sau reload vẫn là gate
+xác minh.
 
 ## D-13 — Tranh chấp Driver giữa Trip và Delivery
 

@@ -21,5 +21,10 @@ docker compose exec -T postgres pg_dump \
   --username "${POSTGRES_USER:-gove}" \
   --dbname "${POSTGRES_DB:-gove}" \
   --format=custom > "$output"
+chmod 600 "$output"
+if [[ "$(stat -c '%a' "$output")" != "600" ]]; then
+  echo "Backup filesystem did not enforce owner-only permissions: $output" >&2
+  exit 73
+fi
 
 echo "Created PostgreSQL backup: $output"

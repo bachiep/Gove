@@ -33,4 +33,38 @@ describe('InMemoryRateLimiter', () => {
     expect(limiter.check('first').allowed).toBe(false);
     expect(limiter.check('second').allowed).toBe(true);
   });
+
+  it('reclaims expired buckets before handling a new key', () => {
+    let now = 0;
+    const limiter = new InMemoryRateLimiter(1, 1_000, () => now, 3);
+
+    limiter.check('first');
+    limiter.check('second');
+    expect(bucketKeys(limiter)).toEqual(['first', 'second']);
+
+    now = 1_000;
+    limiter.check('third');
+
+    expect(bucketKeys(limiter)).toEqual(['third']);
+  });
+
+  it('bounds active buckets by deterministically evicting the oldest key', () => {
+    const limiter = new InMemoryRateLimiter(1, 10_000, () => 0, 2);
+
+    limiter.check('first');
+    limiter.check('second');
+    limiter.check('third');
+
+    expect(bucketKeys(limiter)).toEqual(['second', 'third']);
+    expect(limiter.check('first')).toMatchObject({
+      allowed: true,
+      remaining: 0,
+    });
+  });
 });
+
+function bucketKeys(limiter: InMemoryRateLimiter): string[] {
+  return [
+    ...(limiter as unknown as { buckets: Map<string, unknown> }).buckets.keys(),
+  ];
+}

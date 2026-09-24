@@ -1,7 +1,7 @@
 # Tham Chiếu Cơ Sở Dữ Liệu Cho Báo Cáo
 
 Trạng thái: Đã đối chiếu với migration hiện tại
-Cập nhật lần cuối: 2026-09-24
+Cập nhật lần cuối: 2026-09-25
 
 ## Nền tảng dữ liệu
 
@@ -12,21 +12,34 @@ vấn Driver gần Pickup.
 
 ## Danh mục migration
 
-| Migration                               | Nội dung chính                                                 |
-| --------------------------------------- | -------------------------------------------------------------- |
-| `0001-foundation.sql`                   | PostGIS và các schema ban đầu                                  |
-| `0002-identity-auth.sql`                | User, role, credential, refresh session, receipt               |
-| `0003-driver-profile-and-vehicle.sql`   | Driver profile, Vehicle và index eligibility                   |
-| `0004-pricing-and-trip-write-model.sql` | Service Type, rate card, Fare Quote, Trip, transition, outbox  |
-| `0005-dispatch-foundation.sql`          | Latest Location, work state, reservation và Trip Offer         |
-| `0006-completion-and-payment.sql`       | Ride assignment, final Fare và Payment Attempt                 |
-| `0007-delivery-foundation.sql`          | Delivery aggregate, transition, receipt và outbox              |
-| `0008-delivery-dispatch.sql`            | Delivery reservation/offer/assignment và work state dùng chung |
-| `0009-delivery-custody-and-proof.sql`   | Custody confirmation và Delivery Proof                         |
+| Migration                                   | Nội dung chính                                                   |
+| ------------------------------------------- | ---------------------------------------------------------------- |
+| `0001-foundation.sql`                       | PostGIS và các schema ban đầu                                    |
+| `0002-identity-auth.sql`                    | User, role, credential, refresh session, receipt                 |
+| `0003-driver-profile-and-vehicle.sql`       | Driver profile, Vehicle và index eligibility                     |
+| `0004-pricing-and-trip-write-model.sql`     | Service Type, rate card, Fare Quote, Trip, transition, outbox    |
+| `0005-dispatch-foundation.sql`              | Latest Location, work state, reservation và Trip Offer           |
+| `0006-completion-and-payment.sql`           | Ride assignment, final Fare và Payment Attempt                   |
+| `0007-delivery-foundation.sql`              | Delivery aggregate, transition, receipt và outbox                |
+| `0008-delivery-dispatch.sql`                | Delivery reservation/offer/assignment và work state dùng chung   |
+| `0009-delivery-custody-and-proof.sql`       | Custody confirmation và Delivery Proof                           |
+| `0010-operator-diagnostic-audit.sql`        | Operator diagnostic review và audit action                       |
+| `0011-ride-cancellation.sql`                | Customer cancellation audit, receipt và outbox                   |
+| `0012-driver-onboarding-approval-audit.sql` | Vehicle review metadata và Operator approval history             |
+| `0013-payment-provider-baseline.sql`        | Payment provider column và constraint `SIMULATOR`/`MOMO`/`SEPAY` |
+| `0014-operator-onboarding-idempotency.sql`  | Transactional receipts cho Operator approve/reject               |
 
 Migration runner tạo `public.schema_migrations`, dùng advisory lock để chỉ có
 một tiến trình migration tại một thời điểm, và áp dụng mỗi file trong một
 transaction.
+
+Migration `0013` does not claim a live provider integration. `SIMULATOR` is
+the deterministic test adapter; `MOMO` and `SEPAY` currently create
+`PENDING` Payment Attempts without outbound API calls, QR generation, webhook
+handling, signature verification, or reconciliation.
+
+Migration `0014` does not add a pending-review list. It only makes the existing
+Driver-profile and Vehicle approve/reject mutations replay-safe and auditable.
 
 ## Invariant quan trọng cần giải thích
 

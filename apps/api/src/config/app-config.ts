@@ -33,6 +33,17 @@ const environmentSchema = z.object({
     .max(3_600)
     .default(60),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(10_000).default(60),
+  ROUTING_OSRM_BASE_URL: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .url()
+      .refine(isSafeOsrmBaseUrl, {
+        message:
+          'ROUTING_OSRM_BASE_URL must be an HTTP(S) URL without credentials, query, or fragment.',
+      })
+      .optional(),
+  ),
 });
 
 export type AppConfig = z.infer<typeof environmentSchema>;
@@ -51,4 +62,19 @@ export function readAppConfig(
   }
 
   return config;
+}
+
+function isSafeOsrmBaseUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash
+    );
+  } catch {
+    return false;
+  }
 }

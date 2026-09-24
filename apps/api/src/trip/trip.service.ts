@@ -1,7 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { TripHistoryItem, TripResponse } from '@gove/contracts';
+import type {
+  ActiveTripResponse,
+  CancelTripResponse,
+  CancellationReasonCode,
+  TripHistoryItem,
+  TripResponse,
+} from '@gove/contracts';
 
 import { ApiError } from '../common/http/api-error.js';
 import { TripCommandError, TripRepository } from './trip.repository.js';
@@ -41,7 +47,9 @@ export class TripService {
               ? 'The Fare Quote has expired.'
               : error.code === 'FARE_QUOTE_ALREADY_CONSUMED'
                 ? 'The Fare Quote was already used to create a Trip.'
-                : 'The idempotency key was reused with a different request.';
+                : error.code === 'ACTIVE_TRIP_EXISTS'
+                  ? 'The Customer already has an active Trip.'
+                  : 'The idempotency key was reused with a different request.';
         throw new ApiError(status, error.code, message);
       }
       throw error;
@@ -53,5 +61,49 @@ export class TripService {
     role: 'CUSTOMER' | 'DRIVER',
   ): Promise<TripHistoryItem[]> {
     return this.repository.listHistory(actorId, role);
+  }
+
+  findCurrentForCustomer(
+    customerUserId: string,
+  ): Promise<ActiveTripResponse | null> {
+    return this.repository.findCurrentForCustomer(customerUserId);
+  }
+
+  async cancelTrip(input: {
+    customerUserId: string;
+    tripId: string;
+    idempotencyKey: string;
+    correlationId?: string;
+    reasonCode: CancellationReasonCode;
+    reasonDetail?: string;
+  }): Promise<CancelTripResponse> {
+    try {
+      return await this.repository.cancelTrip({
+        ...input,
+        correlationId: input.correlationId ?? randomUUID(),
+        requestFingerprint: createHash('sha256')
+          .update(
+            JSON.stringify({
+              tripId: input.tripId,
+              reasonCode: input.reasonCode,
+              reasonDetail: input.reasonDetail ?? null,
+            }),
+          )
+          .digest(),
+      });
+    } catch (error) {
+      if (!(error instanceof TripCommandError)) throw error;
+      const status =
+        error.code === 'TRIP_NOT_FOUND'
+          ? HttpStatus.NOT_FOUND
+          : HttpStatus.CONFLICT;
+      const message =
+        error.code === 'TRIP_NOT_FOUND'
+          ? 'The Trip was not found for this Customer.'
+          : error.code === 'TRIP_CANCELLATION_NOT_ALLOWED'
+            ? 'The Trip cannot be cancelled in its current state.'
+            : 'The idempotency key was reused with a different request.';
+      throw new ApiError(status, error.code, message);
+    }
   }
 }

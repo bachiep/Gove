@@ -56,6 +56,8 @@ Reservation, and the expected Trip version.
 ## Status boundary
 
 The schema, ranking, reservation transaction, concurrent acceptance behavior,
-offer expiry repair, and related Trip outbox writes are implemented and tested
-locally. Reject/reassignment commands, an expiry worker, asynchronous outbox
-consumption, and performance characteristics remain unverified or planned.
+reject/reassignment commands, expiry worker, expiry repair, and related Trip
+outbox writes are implemented and tested locally. Each expired Offer advances
+the Trip version even though it remains in `MATCHING`, so every durable expiry
+and reassignment attempt has a distinct aggregate version. Asynchronous outbox
+consumption and performance characteristics remain unverified or planned.

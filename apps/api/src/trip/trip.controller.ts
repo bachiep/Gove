@@ -5,6 +5,7 @@ import {
   Headers,
   HttpStatus,
   Inject,
+  Param,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -14,7 +15,11 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import type { TripHistoryItem, TripResponse } from '@gove/contracts';
+import type {
+  ActiveTripResponse,
+  TripHistoryItem,
+  TripResponse,
+} from '@gove/contracts';
 
 import { ApiError } from '../common/http/api-error.js';
 import { parseInput } from '../common/http/validation.js';
@@ -23,7 +28,11 @@ import { CurrentActor } from '../identity/current-actor.decorator.js';
 import type { SessionActor } from '../identity/identity.types.js';
 import { Roles } from '../identity/roles.decorator.js';
 import { RolesGuard } from '../identity/roles.guard.js';
-import { createTripSchema } from './trip.schemas.js';
+import {
+  cancelTripSchema,
+  createTripSchema,
+  tripParamsSchema,
+} from './trip.schemas.js';
 import { TripService } from './trip.service.js';
 
 @ApiTags('trip')
@@ -66,11 +75,51 @@ export class TripController {
     });
   }
 
+  @Post(':tripId/cancel')
+  @ApiOperation({
+    summary:
+      'Cancel an eligible Customer-owned Trip without a cancellation fee',
+  })
+  async cancelTrip(
+    @CurrentActor() actor: SessionActor,
+    @Param() params: unknown,
+    @Body() body: unknown,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Headers('x-correlation-id') correlationId: string | undefined,
+  ) {
+    if (
+      !idempotencyKey ||
+      idempotencyKey.length < 8 ||
+      idempotencyKey.length > 128
+    ) {
+      throw new ApiError(
+        HttpStatus.BAD_REQUEST,
+        'IDEMPOTENCY_KEY_REQUIRED',
+        'A valid Idempotency-Key header is required.',
+      );
+    }
+    return this.trips.cancelTrip({
+      customerUserId: actor.id,
+      tripId: parseInput(tripParamsSchema, params).tripId,
+      idempotencyKey,
+      correlationId,
+      ...parseInput(cancelTripSchema, body),
+    });
+  }
+
   @Get('history')
   @Roles('CUSTOMER', 'DRIVER')
   @ApiOperation({ summary: 'List the current actor Trip history' })
   history(@CurrentActor() actor: SessionActor): Promise<TripHistoryItem[]> {
     const role = actor.roles.includes('DRIVER') ? 'DRIVER' : 'CUSTOMER';
     return this.trips.listHistory(actor.id, role);
+  }
+
+  @Get('current')
+  @ApiOperation({ summary: 'Read the current Customer active Trip' })
+  current(
+    @CurrentActor() actor: SessionActor,
+  ): Promise<ActiveTripResponse | null> {
+    return this.trips.findCurrentForCustomer(actor.id);
   }
 }

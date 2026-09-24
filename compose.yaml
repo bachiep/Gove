@@ -1,6 +1,37 @@
 name: gove
 
 services:
+  osrm:
+    image: ${OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend:26.9.0-debian}
+    profiles: ['osrm']
+    command:
+      [
+        'osrm-routed',
+        '--algorithm',
+        '${OSRM_ALGORITHM:-mld}',
+        '/data/${OSRM_DATASET:-hanoi-latest}.osrm',
+      ]
+    environment:
+      OSRM_DATASET: ${OSRM_DATASET:-hanoi-latest}
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'test -r "/data/$${OSRM_DATASET}.osrm.properties" && kill -0 1',
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
+    ports:
+      - '127.0.0.1:${OSRM_PORT:-5500}:5000'
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: gove-osrm-data
+        target: /data
+        read_only: true
+
   postgres:
     image: postgis/postgis:17-3.5-alpine
     environment:
@@ -21,4 +52,7 @@ services:
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
 
 volumes:
+  gove-osrm-data:
+    external: true
+    name: ${OSRM_VOLUME_NAME:-gove-osrm-data}
   gove-postgres:

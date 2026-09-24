@@ -19,7 +19,7 @@ import { CurrentActor } from '../identity/current-actor.decorator.js';
 import type { SessionActor } from '../identity/identity.types.js';
 import { Roles } from '../identity/roles.decorator.js';
 import { RolesGuard } from '../identity/roles.guard.js';
-import type { TripDetailResponse, TripOfferResponse } from '@gove/contracts';
+import type { ActiveTripResponse, TripOfferResponse } from '@gove/contracts';
 import { DispatchService } from './dispatch.service.js';
 import {
   dispatchOfferParamsSchema,
@@ -68,7 +68,7 @@ export class DispatchController {
   @ApiOperation({ summary: 'Read the current assigned Trip for the Driver' })
   currentTrip(
     @CurrentActor() actor: SessionActor,
-  ): Promise<TripDetailResponse | null> {
+  ): Promise<ActiveTripResponse | null> {
     return this.dispatch.findCurrentAssignedTrip(actor.id);
   }
 

@@ -1,7 +1,7 @@
 # Sơ Đồ Domain và Use Case
 
 Trạng thái: Hỗn hợp; phần chưa hoàn thiện được ghi chú riêng
-Cập nhật lần cuối: 2026-09-24
+Cập nhật lần cuối: 2026-09-25
 
 ## D-06 — Năng lực actor trong Ride
 
@@ -42,8 +42,9 @@ flowchart LR
     operator --> diagnose
 ```
 
-Các năng lực Customer và Driver trong hình đã được triển khai local. Metric cho
-Operator đã có, nhưng action/audit đầy đủ theo FR-18 vẫn còn thiếu.
+Các năng lực Customer và Driver trong hình đã được triển khai local. Operator
+diagnostic action, onboarding approve/reject và audit đã có API/integration
+coverage; pending-review listing và browser acceptance vẫn còn mở.
 
 ## D-07 — Năng lực actor trong Parcel Delivery
 
@@ -74,8 +75,10 @@ flowchart LR
     driver --> recordProof
 ```
 
-Backend và Driver Console đã hỗ trợ lifecycle trong hình. UI tạo Delivery và
-trạng thái live cho Customer còn thiếu; lịch sử Customer qua HTTP đã có.
+Backend và Driver Console đã hỗ trợ lifecycle trong hình. UI tạo Delivery,
+history/detail và trạng thái live cho Customer đã có local; synthetic browser
+acceptance cho Driver custody đến `DELIVERED` đã được quan sát. GPS permission,
+reconnect và accessibility vẫn còn mở.
 
 ## D-08 — State machine của Trip
 

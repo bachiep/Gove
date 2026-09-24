@@ -1,15 +1,20 @@
 # Gove
 
-Gove is an academic real-time ride-hailing and logistics platform. The project is built as a defensible vertical slice first: a customer requests a ride, one eligible driver is reserved and accepts, both parties receive live state updates, the trip completes, and a payment is simulated idempotently.
+Gove is an academic real-time ride-hailing and logistics platform. The project is built as a defensible vertical slice first: a customer requests a ride, one eligible driver is reserved and accepts, both parties receive live state updates, the trip completes, and payment is handled idempotently through the `SIMULATOR` provider. `MOMO` and `SEPAY` currently provide an explicit `PENDING` integration baseline only.
 
 ## Current status
 
-**M6 hardening and M7 logistics closure / Tested locally.** The complete Ride
-flow and most of the first parcel Delivery flow are implemented and tested
-locally. Customer Delivery creation UI, Delivery realtime, representative
-business-load evidence, browser acceptance, security closure, and rollback
-evidence remain. No VPS environment, TLS endpoint, or production-capacity
-claim has been verified.
+**M6 hardening, M7 logistics closure, and M7.1 map/operator foundation / Tested
+locally.** The complete Ride flow; Customer Delivery creation, history, detail,
+and realtime projection; and Driver Delivery offer, custody, and handoff
+commands are implemented. Delivery WebSocket snapshots/events and the initial
+Customer map projection are also covered by local automated evidence; the
+recorded browser evidence now covers a local synthetic Customer-and-Driver
+Delivery custody path through `DELIVERED` and a local MapLibre renderer
+preview, but not GPS permission, reconnect, vector basemap, or road routing. Representative
+business-load evidence, security closure, current-baseline rollback evidence,
+road routing, full live Driver marker flows, and road-based ETA remain. No VPS
+environment, TLS endpoint, or production-capacity claim has been verified.
 
 ## Architecture baseline
 
@@ -20,6 +25,12 @@ claim has been verified.
 - Redis may be introduced for expiring location indexes and multi-instance WebSocket fan-out; it never owns durable business state.
 - REST for commands and queries, WebSocket for live projections, and a transactional outbox for reliable asynchronous work.
 
+The local migration runner applies the ordered PostgreSQL migration set
+`0001` through `0014`. It establishes the foundation, identity, Driver,
+pricing/Trip, Dispatch, completion/payment, Delivery, Delivery dispatch and
+custody proof, Operator diagnostic audit, Ride cancellation, Driver onboarding
+review, payment-provider baseline, and Operator onboarding idempotency schemas.
+
 The modular monolith is intentional. It keeps domain seams explicit while avoiding the operational cost of premature microservices. A module is extracted only when measured load, team ownership, or deployment isolation justifies it.
 
 ## Documentation
@@ -28,6 +39,8 @@ The modular monolith is intentional. It keeps domain seams explicit while avoidi
 - [MVP requirements](docs/requirements/mvp.md)
 - [Domain language](CONTEXT.md)
 - [Architecture overview](docs/architecture/overview.md)
+- [Map, live location, and ETA](docs/architecture/map-and-eta.md)
+- [Payment provider baseline](docs/payments/provider-integration-baseline.md)
 - [Roadmap](docs/project/roadmap.md)
 - [Completion definition](docs/project/completion-definition.md)
 - [Acceptance matrix](docs/project/acceptance-matrix.md)

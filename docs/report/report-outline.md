@@ -82,10 +82,11 @@ Hình đề xuất: deployment topology local và staging.
 tách ý tưởng tương lai khỏi công việc bắt buộc chưa hoàn thành.
 
 Nguồn chính: acceptance matrix, risk register, technical debt, known
-limitations và completion definition.
+limitations, completion definition và [sổ đăng ký bằng chứng](evidence-register.md).
 
 ## Phụ lục
 
 Nên kèm danh mục endpoint, message WebSocket, migration, DDL chọn lọc, SQL kiểm
-tra invariant, test inventory, bảng benchmark, ADR register, demo checklist và
-bằng chứng deployment đã loại dữ liệu nhạy cảm.
+tra invariant, test inventory, bảng benchmark, ADR register, demo checklist,
+[sổ đăng ký bằng chứng](evidence-register.md), danh mục sơ đồ và bằng chứng
+deployment đã loại dữ liệu nhạy cảm.

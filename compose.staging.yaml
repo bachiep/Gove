@@ -1,6 +1,37 @@
 name: gove-staging
 
 services:
+  osrm:
+    image: ${OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend:26.9.0-debian}
+    profiles: ['osrm']
+    command:
+      [
+        'osrm-routed',
+        '--algorithm',
+        '${OSRM_ALGORITHM:-mld}',
+        '/data/${OSRM_DATASET:-hanoi-latest}.osrm',
+      ]
+    environment:
+      OSRM_DATASET: ${OSRM_DATASET:-hanoi-latest}
+    expose:
+      - '5000'
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'test -r "/data/$${OSRM_DATASET}.osrm.properties" && kill -0 1',
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: gove-staging-osrm-data
+        target: /data
+        read_only: true
+
   postgres:
     image: postgis/postgis:17-3.5-alpine
     environment:
@@ -53,6 +84,7 @@ services:
       AUTH_REFRESH_TTL_DAYS: ${AUTH_REFRESH_TTL_DAYS:-14}
       AUTH_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
       AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-60}
+      ROUTING_OSRM_BASE_URL: ${ROUTING_OSRM_BASE_URL:-}
     healthcheck:
       test:
         [
@@ -79,4 +111,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  gove-staging-osrm-data:
+    external: true
+    name: ${OSRM_VOLUME_NAME:-gove-staging-osrm-data}
   gove-staging-postgres:

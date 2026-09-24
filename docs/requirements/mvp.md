@@ -61,7 +61,7 @@ completion claim is defined in
 5. A duplicate Payment capture key returns the original Payment Attempt.
 6. Stale GPS is rejected for matching and visibly marked stale in the UI.
 7. Customer A cannot read or mutate Customer B's Trip.
-8. A disconnected client reloads the current Trip snapshot and resumes from a monotonic version.
+8. A disconnected client can reload `/trips/current` or `/deliveries/active` and resume from a monotonic version; Browser Harness proof remains an acceptance gate.
 9. PostgreSQL unavailability never produces a false success response.
 10. Redis unavailability cannot corrupt durable Trip, Driver, or Payment state.
 

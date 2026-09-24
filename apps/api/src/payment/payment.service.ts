@@ -1,18 +1,25 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { PaymentAttemptResponse, PaymentStatus } from '@gove/contracts';
+import type {
+  PaymentAttemptResponse,
+  PaymentProvider,
+  PaymentStatus,
+} from '@gove/contracts';
 
 import { ApiError } from '../common/http/api-error.js';
 import {
   PaymentCommandError,
   PaymentRepository,
 } from './payment.repository.js';
+import { PaymentProviderRegistry } from './payment-provider.js';
 
 @Injectable()
 export class PaymentService {
   constructor(
     @Inject(PaymentRepository) private readonly repository: PaymentRepository,
+    @Inject(PaymentProviderRegistry)
+    private readonly providers: PaymentProviderRegistry,
   ) {}
 
   async capture(input: {
@@ -20,15 +27,22 @@ export class PaymentService {
     tripId: string;
     idempotencyKey: string;
     correlationId?: string;
-    simulationOutcome: PaymentStatus;
+    provider: PaymentProvider;
+    simulationOutcome?: PaymentStatus;
   }): Promise<PaymentAttemptResponse> {
     try {
+      const plan = this.providers.planCapture({
+        provider: input.provider,
+        simulationOutcome: input.simulationOutcome,
+      });
       return await this.repository.capture({
         ...input,
+        ...plan,
         requestFingerprint: createHash('sha256')
           .update(
             JSON.stringify({
               tripId: input.tripId,
+              provider: plan.provider,
               simulationOutcome: input.simulationOutcome,
             }),
           )

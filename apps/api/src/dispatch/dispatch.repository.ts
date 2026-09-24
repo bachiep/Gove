@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 import type {
+  ActiveTripResponse,
   DispatchMatchResponse,
   DispatchOfferRejectionResponse,
   DriverWorkState,
@@ -23,7 +24,9 @@ import { evaluateDispatchExpiry } from './dispatch-expiry-policy.js';
 import { rankEligibleDriverCandidates } from './dispatch-ranking.js';
 
 const LOCATION_FRESHNESS_SECONDS = 15;
-const OFFER_TTL_SECONDS = 10;
+// Give the Driver Console enough time to render and surface an Offer while
+// keeping the reservation short-lived and fully enforced by PostgreSQL.
+const OFFER_TTL_SECONDS = 20;
 const MAX_OFFER_ATTEMPTS = 3;
 const SEARCH_RADIUS_METERS = 5_000;
 const MAX_CANDIDATES = 20;
@@ -64,14 +67,29 @@ interface OfferRow extends QueryResultRow {
 
 interface DueOfferRow extends QueryResultRow {
   id: string;
+}
+
+interface LockedDueOfferRow extends QueryResultRow {
+  id: string;
   trip_id: string;
   driver_user_id: string;
   expires_at: Date;
+  reservation_id: string;
+}
+
+interface LockedTripForExpiryRow extends QueryResultRow {
+  id: string;
+  state: TripState;
+  version: number;
   database_now: Date;
-  trip_state: TripState;
-  trip_version: number;
-  reservation_status: 'ACTIVE' | 'COMMITTED' | 'RELEASED' | 'EXPIRED' | null;
-  work_state: DriverWorkState | null;
+}
+
+interface LockedReservationForExpiryRow extends QueryResultRow {
+  status: 'ACTIVE' | 'COMMITTED' | 'RELEASED' | 'EXPIRED';
+}
+
+interface LockedWorkStateForExpiryRow extends QueryResultRow {
+  work_state: DriverWorkState;
 }
 
 interface AssignedTripRow extends QueryResultRow {
@@ -94,6 +112,12 @@ interface AssignedTripRow extends QueryResultRow {
   assignment_id: string;
   assignment_status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'RELEASED';
   work_state: DriverWorkState;
+  pickup_label: string;
+  pickup_latitude: string;
+  pickup_longitude: string;
+  dropoff_label: string;
+  dropoff_latitude: string;
+  dropoff_longitude: string;
 }
 
 export type DispatchCommandErrorCode =
@@ -239,7 +263,7 @@ export class DispatchRepository {
 
   async findCurrentAssignedTrip(
     driverUserId: string,
-  ): Promise<TripDetailResponse | null> {
+  ): Promise<ActiveTripResponse | null> {
     const result = await this.database.query<AssignedTripRow>(
       `SELECT t.id, t.fare_quote_id, t.customer_user_id,
               t.service_type_code, t.state, t.version, t.currency,
@@ -247,6 +271,12 @@ export class DispatchRepository {
               t.applied_surge_multiplier_bps, t.actual_distance_meters,
               t.actual_duration_seconds, t.final_fare_minor,
               t.created_at, t.completed_at,
+              t.pickup_label,
+              ST_Y(t.pickup_location::geometry) AS pickup_latitude,
+              ST_X(t.pickup_location::geometry) AS pickup_longitude,
+              t.dropoff_label,
+              ST_Y(t.dropoff_location::geometry) AS dropoff_latitude,
+              ST_X(t.dropoff_location::geometry) AS dropoff_longitude,
               a.id AS assignment_id, a.driver_user_id, a.status AS assignment_status,
               ws.work_state
        FROM dispatch.assignments a
@@ -444,6 +474,26 @@ export class DispatchRepository {
         return { rejected: true, response: receipt.response_body };
       }
 
+      // Cancellation locks the Trip aggregate before its Offers. Acquire the
+      // same lock order here so concurrent acceptance and cancellation cannot
+      // deadlock while each command is trying to lock the other row first.
+      const offerReference = await executor.query<{ trip_id: string }>(
+        `SELECT trip_id
+         FROM dispatch.trip_offers
+         WHERE id = $1`,
+        [input.offerId],
+      );
+      const referencedTripId = offerReference.rows[0]?.trip_id;
+      if (!referencedTripId) throw new DispatchCommandError('OFFER_NOT_FOUND');
+
+      await executor.query(
+        `SELECT id
+         FROM trip.trips
+         WHERE id = $1
+         FOR UPDATE`,
+        [referencedTripId],
+      );
+
       const offerResult = await executor.query<OfferRow>(
         `SELECT o.id, o.trip_id, o.driver_user_id, o.attempt_number, o.status,
                 o.expires_at, t.state AS trip_state, t.version AS trip_version,
@@ -451,7 +501,7 @@ export class DispatchRepository {
          FROM dispatch.trip_offers o
          JOIN trip.trips t ON t.id = o.trip_id
          WHERE o.id = $1
-         FOR UPDATE OF o, t`,
+         FOR UPDATE OF o`,
         [input.offerId],
       );
       const offer = offerResult.rows[0];
@@ -612,95 +662,200 @@ export class DispatchRepository {
   }
 
   async expireDueOffers(): Promise<number> {
-    return this.database.transaction(async (executor) => {
-      const due = await executor.query<DueOfferRow>(
-        `SELECT o.id, o.trip_id, o.driver_user_id, o.expires_at,
-                now() AS database_now,
-                t.state AS trip_state, t.version AS trip_version,
-                r.status AS reservation_status, ws.work_state
-         FROM dispatch.trip_offers o
-         JOIN trip.trips t ON t.id = o.trip_id
-         LEFT JOIN dispatch.driver_reservations r ON r.id = o.reservation_id
-         LEFT JOIN dispatch.driver_work_states ws
-           ON ws.driver_user_id = o.driver_user_id
-         WHERE o.status = 'PENDING' AND o.expires_at <= now()
-         ORDER BY o.expires_at ASC, o.id ASC
-         LIMIT 100
-         FOR UPDATE OF o, t SKIP LOCKED`,
-      );
-      let processed = 0;
-      for (const offer of due.rows) {
-        const decision = evaluateDispatchExpiry({
-          nowEpochMs: offer.database_now.getTime(),
-          offerExpiresAtEpochMs: offer.expires_at.getTime(),
-          offerState: 'PENDING',
-          reservationState: offer.reservation_status ?? 'RELEASED',
-          workState: offer.work_state ?? 'AVAILABLE',
-          tripState: offer.trip_state,
-        });
-        if (decision.outcome !== 'EXPIRED_AND_RELEASED') continue;
+    // The worklist read intentionally does not lock rows. Each item is claimed
+    // in its own short transaction below, avoiding a batch-wide rollback and
+    // allowing competing command handlers to make progress.
+    const due = await this.database.query<DueOfferRow>(
+      `SELECT o.id
+       FROM dispatch.trip_offers o
+       WHERE o.status = 'PENDING' AND o.expires_at <= now()
+       ORDER BY o.expires_at ASC, o.id ASC
+       LIMIT 100`,
+    );
+    let processed = 0;
+    for (const offer of due.rows) {
+      try {
+        if (await this.expireDueOffer(offer.id)) processed += 1;
+      } catch (error) {
+        // A domain conflict means this candidate became stale or unmatchable
+        // after the worklist read. Its transaction has rolled back, so a later
+        // sweep can retry it without losing data; do not poison other offers.
+        if (error instanceof DispatchCommandError) continue;
+        throw error;
+      }
+    }
+    return processed;
+  }
 
-        await expireOffer(
-          executor,
-          offer.id,
-          offer.trip_id,
-          offer.driver_user_id,
+  private async expireDueOffer(offerId: string): Promise<boolean> {
+    return this.database.transaction(async (executor) => {
+      // Establish the Trip aggregate first. This matches accept/reject/cancel
+      // and is deliberately separate from the Offer lock: PostgreSQL may pick
+      // an arbitrary join order when both relations are locked in one query.
+      const offerReference = await executor.query<{ trip_id: string }>(
+        `SELECT trip_id
+         FROM dispatch.trip_offers
+         WHERE id = $1 AND status = 'PENDING' AND expires_at <= now()`,
+        [offerId],
+      );
+      const tripId = offerReference.rows[0]?.trip_id;
+      if (!tripId) return false;
+
+      const tripResult = await executor.query<LockedTripForExpiryRow>(
+        `SELECT id, state, version, now() AS database_now
+         FROM trip.trips
+         WHERE id = $1
+         FOR UPDATE SKIP LOCKED`,
+        [tripId],
+      );
+      const trip = tripResult.rows[0];
+      if (!trip) return false;
+
+      const offerResult = await executor.query<LockedDueOfferRow>(
+        `SELECT id, trip_id, driver_user_id, expires_at, reservation_id
+         FROM dispatch.trip_offers
+         WHERE id = $1 AND trip_id = $2
+           AND status = 'PENDING' AND expires_at <= now()
+         FOR UPDATE SKIP LOCKED`,
+        [offerId, trip.id],
+      );
+      const offer = offerResult.rows[0];
+      if (!offer) return false;
+
+      const reservationResult =
+        await executor.query<LockedReservationForExpiryRow>(
+          `SELECT status
+         FROM dispatch.driver_reservations
+         WHERE id = $1
+         FOR UPDATE SKIP LOCKED`,
+          [offer.reservation_id],
         );
+      // The foreign key guarantees the reservation exists. A locked row is
+      // retried in a later sweep rather than blocking the worker.
+      const reservation = reservationResult.rows[0];
+      if (!reservation) return false;
+
+      const workStateResult = await executor.query<LockedWorkStateForExpiryRow>(
+        `SELECT work_state
+         FROM dispatch.driver_work_states
+         WHERE driver_user_id = $1
+         FOR UPDATE SKIP LOCKED`,
+        [offer.driver_user_id],
+      );
+      const workState = workStateResult.rows[0];
+      if (!workState) return false;
+
+      const decision = evaluateDispatchExpiry({
+        nowEpochMs: trip.database_now.getTime(),
+        offerExpiresAtEpochMs: offer.expires_at.getTime(),
+        offerState: 'PENDING',
+        reservationState: reservation.status,
+        workState: workState.work_state,
+        tripState: trip.state,
+      });
+      if (decision.outcome !== 'EXPIRED_AND_RELEASED') return false;
+
+      // An accepted/committed reservation or en-route Driver means the offer
+      // is not an independently recoverable expiry record. Expiring only the
+      // offer would leave a Driver bound to a MATCHING Trip without an active
+      // assignment. Leave this inconsistent aggregate unchanged for explicit
+      // reconciliation, while allowing the rest of this sweep to progress.
+      if (
+        decision.reservation.to !== 'EXPIRED' ||
+        decision.workState.to !== 'AVAILABLE'
+      ) {
+        return false;
+      }
+
+      await expireOffer(
+        executor,
+        offer.id,
+        offer.trip_id,
+        offer.driver_user_id,
+      );
+
+      if (trip.state !== 'MATCHING') {
+        // A recovered terminal Trip must never be reopened. We still emit the
+        // cleanup event so the Driver can discard the stale offer projection.
         await appendTripOutbox(
           executor,
           offer.trip_id,
-          offer.trip_version,
+          trip.version,
           'dispatch.offer.expired',
-          {
-            tripId: offer.trip_id,
-            offerId: offer.id,
-            driverUserId: offer.driver_user_id,
-            reason: 'OFFER_EXPIRED',
-          },
+          expiryEventPayload(offer, trip.version),
         );
-
-        if (offer.trip_state === 'MATCHING') {
-          const reassignedOffer = await reserveNextOffer(executor, {
-            tripId: offer.trip_id,
-            tripState: offer.trip_state,
-            tripVersion: offer.trip_version,
-            excludedDriverUserId: offer.driver_user_id,
-            reassignment: true,
-          });
-          if (!reassignedOffer) {
-            const nextVersion = offer.trip_version + 1;
-            await executor.query(
-              `UPDATE trip.trips
-               SET state = 'NO_DRIVER_AVAILABLE', version = $2, updated_at = now()
-               WHERE id = $1 AND state = 'MATCHING' AND version = $3`,
-              [offer.trip_id, nextVersion, offer.trip_version],
-            );
-            await appendTripTransition(executor, {
-              tripId: offer.trip_id,
-              actorUserId: null,
-              command: 'EXPIRE_OFFER_NO_REASSIGNMENT',
-              fromState: 'MATCHING',
-              toState: 'NO_DRIVER_AVAILABLE',
-              fromVersion: offer.trip_version,
-              toVersion: nextVersion,
-              correlationId: offer.id,
-            });
-            await appendTripOutbox(
-              executor,
-              offer.trip_id,
-              nextVersion,
-              'trip.no_driver_available',
-              {
-                tripId: offer.trip_id,
-                state: 'NO_DRIVER_AVAILABLE',
-                version: nextVersion,
-              },
-            );
-          }
-        }
-        processed += 1;
+        return true;
       }
-      return processed;
+
+      const expiredTripVersion = trip.version + 1;
+      await executor.query(
+        `UPDATE trip.trips
+         SET state = 'MATCHING', version = $2, updated_at = now()
+         WHERE id = $1`,
+        [trip.id, expiredTripVersion],
+      );
+      await appendTripTransition(executor, {
+        tripId: trip.id,
+        actorUserId: null,
+        command: 'EXPIRE_OFFER',
+        fromState: 'MATCHING',
+        toState: 'MATCHING',
+        fromVersion: trip.version,
+        toVersion: expiredTripVersion,
+        correlationId: offer.id,
+      });
+      await appendTripOutbox(
+        executor,
+        trip.id,
+        expiredTripVersion,
+        'dispatch.offer.expired',
+        expiryEventPayload(offer, expiredTripVersion),
+      );
+
+      // A stale reservation/work-state combination is repaired by expiring
+      // the offer, but it is not safe to allocate another Driver until the
+      // policy confirms the aggregate is eligible again. This keeps one bad
+      // record from poisoning the batch or creating a second assignment.
+      if (!decision.mayRetryMatching) return true;
+
+      const reassignedOffer = await reserveNextOffer(executor, {
+        tripId: trip.id,
+        tripState: trip.state,
+        tripVersion: expiredTripVersion,
+        excludedDriverUserId: offer.driver_user_id,
+        reassignment: true,
+      });
+      if (reassignedOffer) return true;
+
+      const noDriverVersion = expiredTripVersion + 1;
+      await executor.query(
+        `UPDATE trip.trips
+         SET state = 'NO_DRIVER_AVAILABLE', version = $2, updated_at = now()
+         WHERE id = $1 AND state = 'MATCHING' AND version = $3`,
+        [trip.id, noDriverVersion, expiredTripVersion],
+      );
+      await appendTripTransition(executor, {
+        tripId: trip.id,
+        actorUserId: null,
+        command: 'EXPIRE_OFFER_NO_REASSIGNMENT',
+        fromState: 'MATCHING',
+        toState: 'NO_DRIVER_AVAILABLE',
+        fromVersion: expiredTripVersion,
+        toVersion: noDriverVersion,
+        correlationId: offer.id,
+      });
+      await appendTripOutbox(
+        executor,
+        trip.id,
+        noDriverVersion,
+        'trip.no_driver_available',
+        {
+          tripId: trip.id,
+          state: 'NO_DRIVER_AVAILABLE',
+          version: noDriverVersion,
+        },
+      );
+      return true;
     });
   }
 
@@ -708,9 +863,45 @@ export class DispatchRepository {
     driverUserId: string;
     offerId: string;
     idempotencyKey: string;
+    requestFingerprint: Buffer;
     correlationId: string;
   }): Promise<AcceptResult> {
     return this.database.transaction(async (executor) => {
+      await executor.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `${input.driverUserId}:accept-offer:${input.idempotencyKey}`,
+      ]);
+      const receiptResult = await executor.query<{
+        request_fingerprint: Buffer;
+        response_body: TripOfferResponse;
+      }>(
+        `SELECT request_fingerprint, response_body
+         FROM trip.command_receipts
+         WHERE actor_user_id = $1 AND operation = 'ACCEPT_OFFER' AND idempotency_key = $2
+         FOR UPDATE`,
+        [input.driverUserId, input.idempotencyKey],
+      );
+      const receipt = receiptResult.rows[0];
+      if (receipt) {
+        if (
+          !sameDigest(receipt.request_fingerprint, input.requestFingerprint)
+        ) {
+          throw new DispatchCommandError('IDEMPOTENCY_KEY_REUSED');
+        }
+        return { accepted: true, response: receipt.response_body };
+      }
+
+      // Customer cancellation locks the Trip before its pending Offer. Keep
+      // the same order here so acceptance and cancellation cannot deadlock.
+      const tripLock = await executor.query<{ id: string }>(
+        `SELECT t.id
+         FROM trip.trips t
+         JOIN dispatch.trip_offers o ON o.trip_id = t.id
+         WHERE o.id = $1
+         FOR UPDATE OF t`,
+        [input.offerId],
+      );
+      if (!tripLock.rows[0]) throw new DispatchCommandError('OFFER_NOT_FOUND');
+
       const offerResult = await executor.query<OfferRow>(
         `SELECT o.id, o.trip_id, o.driver_user_id, o.attempt_number, o.status,
                 o.expires_at, t.state AS trip_state, t.version AS trip_version,
@@ -718,7 +909,7 @@ export class DispatchRepository {
          FROM dispatch.trip_offers o
          JOIN trip.trips t ON t.id = o.trip_id
          WHERE o.id = $1
-         FOR UPDATE OF o, t`,
+         FOR UPDATE OF o`,
         [input.offerId],
       );
       const offer = offerResult.rows[0];
@@ -838,14 +1029,16 @@ export class DispatchRepository {
           version: nextVersion,
         },
       );
+      const response: TripOfferResponse = {
+        ...toOfferResponse(offer),
+        status: 'ACCEPTED',
+        tripState: 'DRIVER_TO_PICKUP',
+        tripVersion: nextVersion,
+      };
+      await persistAcceptanceReceipt(executor, input, response, offer.trip_id);
       return {
         accepted: true,
-        response: {
-          ...toOfferResponse(offer),
-          status: 'ACCEPTED',
-          tripState: 'DRIVER_TO_PICKUP',
-          tripVersion: nextVersion,
-        },
+        response,
       };
     });
   }
@@ -1377,7 +1570,26 @@ function toOfferResponse(row: OfferRow): TripOfferResponse {
   };
 }
 
-function toAssignedTripResponse(row: AssignedTripRow): TripDetailResponse {
+function expiryEventPayload(
+  offer: LockedDueOfferRow,
+  version: number,
+): {
+  tripId: string;
+  offerId: string;
+  driverUserId: string;
+  reason: 'OFFER_EXPIRED';
+  version: number;
+} {
+  return {
+    tripId: offer.trip_id,
+    offerId: offer.id,
+    driverUserId: offer.driver_user_id,
+    reason: 'OFFER_EXPIRED',
+    version,
+  };
+}
+
+function toAssignedTripResponse(row: AssignedTripRow): ActiveTripResponse {
   return {
     id: row.id,
     fareQuoteId: row.fare_quote_id,
@@ -1398,6 +1610,16 @@ function toAssignedTripResponse(row: AssignedTripRow): TripDetailResponse {
         ? null
         : safeInteger(row.final_fare_minor, 'final_fare_minor'),
     completedAt: row.completed_at?.toISOString() ?? null,
+    pickup: {
+      label: row.pickup_label,
+      latitude: finiteNumber(row.pickup_latitude, 'pickup_latitude'),
+      longitude: finiteNumber(row.pickup_longitude, 'pickup_longitude'),
+    },
+    dropoff: {
+      label: row.dropoff_label,
+      latitude: finiteNumber(row.dropoff_latitude, 'dropoff_latitude'),
+      longitude: finiteNumber(row.dropoff_longitude, 'dropoff_longitude'),
+    },
   };
 }
 
@@ -1539,6 +1761,30 @@ async function persistRejectionReceipt(
   );
 }
 
+async function persistAcceptanceReceipt(
+  executor: DatabaseExecutor,
+  input: {
+    driverUserId: string;
+    idempotencyKey: string;
+    requestFingerprint: Buffer;
+  },
+  response: TripOfferResponse,
+  tripId: string,
+): Promise<void> {
+  await executor.query(
+    `INSERT INTO trip.command_receipts (
+       actor_user_id, operation, idempotency_key, request_fingerprint, response_body, trip_id
+     ) VALUES ($1, 'ACCEPT_OFFER', $2, $3, $4, $5)`,
+    [
+      input.driverUserId,
+      input.idempotencyKey,
+      input.requestFingerprint,
+      JSON.stringify(response),
+      tripId,
+    ],
+  );
+}
+
 async function persistLifecycleReceipt(
   executor: DatabaseExecutor,
   input: {
@@ -1564,4 +1810,14 @@ async function persistLifecycleReceipt(
       input.tripId,
     ],
   );
+}
+
+function finiteNumber(value: string, column: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(
+      `Database column ${column} did not contain a finite number`,
+    );
+  }
+  return parsed;
 }

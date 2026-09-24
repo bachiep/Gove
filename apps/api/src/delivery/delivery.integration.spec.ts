@@ -23,6 +23,9 @@ describe('Delivery HTTP seam', () => {
   beforeAll(async () => {
     app = await createApplication();
     await app.init();
+    // These integration tests invoke the expiry sweep deterministically via
+    // runOnce(); prevent the background interval from racing the fixtures.
+    app.get(DeliveryExpiryWorker).onModuleDestroy();
     server = app.getHttpAdapter().getInstance();
     database = app.get(DatabaseService);
   });
@@ -37,13 +40,13 @@ describe('Delivery HTTP seam', () => {
     const payload = {
       pickup: {
         label: 'Parcel pickup',
-        latitude: 10.76,
-        longitude: 106.68,
+        latitude: 21.0285,
+        longitude: 105.8048,
       },
       dropoff: {
         label: 'Parcel dropoff',
-        latitude: 10.78,
-        longitude: 106.7,
+        latitude: 21.033,
+        longitude: 105.835,
       },
       recipient: {
         displayName: 'Delivery Recipient',
@@ -79,13 +82,13 @@ describe('Delivery HTTP seam', () => {
     const created = await createDelivery(ownerToken, randomUUID(), {
       pickup: {
         label: 'Owner pickup',
-        latitude: 10.76,
-        longitude: 106.68,
+        latitude: 21.0285,
+        longitude: 105.8048,
       },
       dropoff: {
         label: 'Owner dropoff',
-        latitude: 10.78,
-        longitude: 106.7,
+        latitude: 21.033,
+        longitude: 105.835,
       },
       recipient: {
         displayName: 'Private Recipient',
@@ -133,6 +136,17 @@ describe('Delivery HTTP seam', () => {
         expect.objectContaining({ id: created.json().id }),
       ]),
     );
+    const ownerActive = await server.inject({
+      method: 'GET',
+      url: '/api/v1/deliveries/active',
+      headers: { authorization: `Bearer ${owner.accessToken}` },
+    });
+    expect(ownerActive.statusCode).toBe(200);
+    expect(ownerActive.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: created.json().id, state: 'REQUESTED' }),
+      ]),
+    );
     const otherList = await server.inject({
       method: 'GET',
       url: '/api/v1/deliveries',
@@ -153,8 +167,16 @@ describe('Delivery HTTP seam', () => {
     await approveDriver(driver.actorId);
     await sendLocationAndGoOnline(driver.accessToken);
     const created = await createDelivery(customer.accessToken, randomUUID(), {
-      pickup: { label: 'Dispatch pickup', latitude: 10.76, longitude: 106.68 },
-      dropoff: { label: 'Dispatch dropoff', latitude: 10.78, longitude: 106.7 },
+      pickup: {
+        label: 'Dispatch pickup',
+        latitude: 21.0285,
+        longitude: 105.8048,
+      },
+      dropoff: {
+        label: 'Dispatch dropoff',
+        latitude: 21.033,
+        longitude: 105.835,
+      },
       recipient: {
         displayName: 'Dispatch Recipient',
         contactPhone: '+84901234567',
@@ -279,6 +301,141 @@ describe('Delivery HTTP seam', () => {
     ]);
   });
 
+  it('does not give one Driver active Trip and Delivery work when matching contends', async () => {
+    const customer = await customerSession();
+    const driver = await driverSession();
+    await setAllAvailableDriversOffline();
+    await approveDriver(driver.actorId);
+    await sendLocationAndGoOnline(driver.accessToken);
+
+    const tripId = await createRequestedTrip(customer.accessToken);
+    const delivery = await createDelivery(
+      customer.accessToken,
+      randomUUID(),
+      deliveryPayload('Trip delivery contention'),
+    );
+    expect(delivery.statusCode).toBe(201);
+    const deliveryId = delivery.json().id as string;
+
+    const [tripMatching, deliveryMatching] = await Promise.all([
+      startTripMatching(customer.accessToken, tripId, randomUUID()),
+      startMatching(customer.accessToken, deliveryId, randomUUID()),
+    ]);
+    expect(tripMatching.statusCode).toBe(201);
+    expect(deliveryMatching.statusCode).toBe(201);
+
+    const tripMatch = tripMatching.json();
+    const deliveryMatch = deliveryMatching.json();
+    const tripWon = tripMatch.offer !== null;
+    const deliveryWon = deliveryMatch.offer !== null;
+    expect(Number(tripWon) + Number(deliveryWon)).toBe(1);
+
+    if (tripWon) {
+      expect(tripMatch).toMatchObject({
+        tripId,
+        tripState: 'MATCHING',
+        offer: { driverId: driver.actorId, status: 'PENDING' },
+      });
+      expect(deliveryMatch).toEqual(
+        expect.objectContaining({
+          deliveryId,
+          deliveryState: 'NO_DRIVER_AVAILABLE',
+          offer: null,
+        }),
+      );
+      const accepted = await acceptTripOffer(
+        driver.accessToken,
+        tripMatch.offer.id as string,
+        randomUUID(),
+      );
+      expect(accepted.statusCode).toBe(201);
+      expect(accepted.json()).toMatchObject({
+        status: 'ACCEPTED',
+        tripState: 'DRIVER_TO_PICKUP',
+      });
+    } else {
+      expect(deliveryMatch).toMatchObject({
+        deliveryId,
+        deliveryState: 'MATCHING',
+        offer: { driverId: driver.actorId, status: 'PENDING' },
+      });
+      expect(tripMatch).toEqual(
+        expect.objectContaining({
+          tripId,
+          tripState: 'NO_DRIVER_AVAILABLE',
+          offer: null,
+        }),
+      );
+      const accepted = await acceptOffer(
+        driver.accessToken,
+        deliveryMatch.offer.id as string,
+        randomUUID(),
+      );
+      expect(accepted.statusCode).toBe(201);
+      expect(accepted.json()).toMatchObject({
+        status: 'ACCEPTED',
+        deliveryState: 'DRIVER_TO_PICKUP',
+      });
+    }
+
+    const durable = await database.query<{
+      work_state: string;
+      current_trip_id: string | null;
+      current_delivery_id: string | null;
+      active_trip_assignments: number;
+      active_delivery_assignments: number;
+      active_trip_reservations: number;
+      active_delivery_reservations: number;
+      trip_state: string;
+      delivery_state: string;
+    }>(
+      `SELECT ws.work_state, ws.current_trip_id, ws.current_delivery_id,
+              (SELECT count(*)::integer FROM dispatch.assignments a
+               WHERE a.driver_user_id = $1 AND a.status = 'ACTIVE') AS active_trip_assignments,
+              (SELECT count(*)::integer FROM delivery.assignments a
+               WHERE a.driver_user_id = $1 AND a.status = 'ACTIVE') AS active_delivery_assignments,
+              (SELECT count(*)::integer FROM dispatch.driver_reservations r
+               WHERE r.driver_user_id = $1 AND r.status = 'ACTIVE') AS active_trip_reservations,
+              (SELECT count(*)::integer FROM delivery.driver_reservations r
+               WHERE r.driver_user_id = $1 AND r.status = 'ACTIVE') AS active_delivery_reservations,
+              (SELECT state FROM trip.trips WHERE id = $2) AS trip_state,
+              (SELECT state FROM delivery.deliveries WHERE id = $3) AS delivery_state
+       FROM dispatch.driver_work_states ws
+       WHERE ws.driver_user_id = $1`,
+      [driver.actorId, tripId, deliveryId],
+    );
+    expect(durable.rows).toHaveLength(1);
+    expect(durable.rows[0]).toMatchObject({
+      work_state: 'TO_PICKUP',
+      active_trip_reservations: 0,
+      active_delivery_reservations: 0,
+    });
+    expect(
+      Number(durable.rows[0]?.active_trip_assignments) +
+        Number(durable.rows[0]?.active_delivery_assignments),
+    ).toBe(1);
+
+    if (tripWon) {
+      expect(durable.rows[0]).toMatchObject({
+        current_trip_id: tripId,
+        current_delivery_id: null,
+        active_trip_assignments: 1,
+        active_delivery_assignments: 0,
+        trip_state: 'DRIVER_TO_PICKUP',
+        delivery_state: 'NO_DRIVER_AVAILABLE',
+      });
+    } else {
+      expect(durable.rows[0]).toMatchObject({
+        current_trip_id: null,
+        current_delivery_id: deliveryId,
+        active_trip_assignments: 0,
+        active_delivery_assignments: 1,
+        trip_state: 'NO_DRIVER_AVAILABLE',
+        delivery_state: 'DRIVER_TO_PICKUP',
+      });
+    }
+  });
+
   it('expires a Delivery Offer and releases the Driver reservation', async () => {
     const customer = await customerSession();
     const driver = await driverSession();
@@ -399,6 +556,15 @@ describe('Delivery HTTP seam', () => {
     expect(pickupReplay.json()).toEqual(pickedUp.json());
     expect(pickedUp.json()).toMatchObject({ state: 'IN_TRANSIT', version: 4 });
 
+    const changedReplay = await pickupDelivery(
+      driver.accessToken,
+      deliveryId,
+      { custodyConfirmation: 'A different custody statement.' },
+      pickupKey,
+    );
+    expect(changedReplay.statusCode).toBe(409);
+    expect(changedReplay.json().code).toBe('IDEMPOTENCY_KEY_REUSED');
+
     const completeKey = randomUUID();
     const [completed, completeReplay] = await Promise.all([
       completeDelivery(
@@ -486,6 +652,17 @@ describe('Delivery HTTP seam', () => {
     });
     expect(otherRead.statusCode).toBe(404);
     expect(otherRead.json().code).toBe('DELIVERY_NOT_FOUND');
+
+    const unauthorizedPickup = await pickupDelivery(
+      otherDriver.accessToken,
+      deliveryId,
+      { custodyConfirmation: 'Unauthorized custody attempt' },
+      randomUUID(),
+    );
+    expect(unauthorizedPickup.statusCode).toBe(404);
+    expect(unauthorizedPickup.json().code).toBe(
+      'DELIVERY_NOT_ASSIGNED_TO_DRIVER',
+    );
   });
 
   async function customerToken(): Promise<string> {
@@ -572,8 +749,8 @@ describe('Delivery HTTP seam', () => {
       url: '/api/v1/drivers/me/location',
       headers: { authorization: `Bearer ${accessToken}` },
       payload: {
-        latitude: 10.76,
-        longitude: 106.68,
+        latitude: 21.0285,
+        longitude: 105.8048,
         accuracyMeters: 10,
         source: 'SIMULATOR',
         sequenceNumber: 1,
@@ -595,6 +772,42 @@ describe('Delivery HTTP seam', () => {
     );
   }
 
+  async function createRequestedTrip(accessToken: string): Promise<string> {
+    const quote = await server.inject({
+      method: 'POST',
+      url: '/api/v1/pricing/fare-quotes',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'idempotency-key': randomUUID(),
+      },
+      payload: {
+        pickup: {
+          label: 'Trip contention pickup',
+          latitude: 21.0285,
+          longitude: 105.8048,
+        },
+        dropoff: {
+          label: 'Trip contention dropoff',
+          latitude: 21.033,
+          longitude: 105.835,
+        },
+        serviceType: 'MOTORBIKE_STANDARD',
+      },
+    });
+    expect(quote.statusCode).toBe(201);
+    const trip = await server.inject({
+      method: 'POST',
+      url: '/api/v1/trips',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'idempotency-key': randomUUID(),
+      },
+      payload: { fareQuoteId: quote.json().id },
+    });
+    expect(trip.statusCode).toBe(201);
+    return trip.json().id as string;
+  }
+
   function createDelivery(
     accessToken: string,
     idempotencyKey: string,
@@ -613,8 +826,16 @@ describe('Delivery HTTP seam', () => {
 
   function deliveryPayload(label: string): DeliveryPayload {
     return {
-      pickup: { label: `${label} pickup`, latitude: 10.76, longitude: 106.68 },
-      dropoff: { label: `${label} dropoff`, latitude: 10.78, longitude: 106.7 },
+      pickup: {
+        label: `${label} pickup`,
+        latitude: 21.0285,
+        longitude: 105.8048,
+      },
+      dropoff: {
+        label: `${label} dropoff`,
+        latitude: 21.033,
+        longitude: 105.835,
+      },
       recipient: {
         displayName: `${label} Recipient`,
         contactPhone: '+84901234567',
@@ -638,6 +859,21 @@ describe('Delivery HTTP seam', () => {
     });
   }
 
+  function startTripMatching(
+    accessToken: string,
+    tripId: string,
+    idempotencyKey: string,
+  ) {
+    return server.inject({
+      method: 'POST',
+      url: `/api/v1/dispatch/trips/${tripId}/match`,
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'idempotency-key': idempotencyKey,
+      },
+    });
+  }
+
   function acceptOffer(
     accessToken: string,
     offerId: string,
@@ -646,6 +882,21 @@ describe('Delivery HTTP seam', () => {
     return server.inject({
       method: 'POST',
       url: `/api/v1/delivery-offers/${offerId}/accept`,
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'idempotency-key': idempotencyKey,
+      },
+    });
+  }
+
+  function acceptTripOffer(
+    accessToken: string,
+    offerId: string,
+    idempotencyKey: string,
+  ) {
+    return server.inject({
+      method: 'POST',
+      url: `/api/v1/dispatch/offers/${offerId}/accept`,
       headers: {
         authorization: `Bearer ${accessToken}`,
         'idempotency-key': idempotencyKey,

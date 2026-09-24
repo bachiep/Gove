@@ -1,6 +1,6 @@
 # Delivery API
 
-Status: Partially implemented and tested locally
+Status: Implemented and tested locally
 Last updated: 2026-09-24
 
 The M7 Delivery boundary is independent of `/trips`. It uses the same bearer
@@ -78,12 +78,29 @@ caller returns `404 DELIVERY_NOT_FOUND`, avoiding assignment disclosure.
 Both projections are derived from durable Delivery offer/assignment records;
 the PWA must not infer them from client-side state.
 
-## Remaining contract work
+## Customer UI and realtime projection
 
-Customer history and Driver status projections are implemented. Customer
-Delivery creation/detail UI and realtime Delivery snapshot/events remain
-required for M7 completion. They must use authoritative Delivery records rather
-than changing Trip semantics.
+The Customer PWA exposes Delivery creation, current status, history, and
+detail views. `GET /api/v1/deliveries/active` returns all non-terminal
+Deliveries owned by the Customer so the view can resume after refresh. The
+array is intentional because this scope does not impose a one-active-Delivery
+invariant. After a Delivery is created, the view authenticates to `/ws`,
+subscribes with `deliveryIds`, applies the authoritative
+`delivery.snapshot`, and accepts only newer `delivery.event` state/version
+payloads. The HTTP record remains the authoritative fallback on a refresh or
+reconnect; the PWA does not change Trip semantics or infer Delivery state from
+client-only data.
+
+The gateway authorizes the Customer owner, assigned Driver, and a Driver with a
+pending or accepted Offer before it emits a snapshot. Matching, assignment,
+custody, handoff, completion, and no-Driver outcome events are appended to the
+Delivery transactional outbox in the same transaction as their durable state
+transition. See [Realtime API](realtime.md) for the wire contract and
+[browser acceptance evidence](../testing/browser-acceptance-2026-09-25.md)
+for the locally observed Customer flow and local synthetic Customer-and-Driver
+custody flow through `DELIVERED`.
+
+## Deferred work
 
 Payment, offer retry/reassignment, cancellation rules, and proof media are
 explicitly outside the frozen first Delivery slice. Adding any of them later

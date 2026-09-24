@@ -1,10 +1,13 @@
 # Sơ Đồ Mô Hình Dữ Liệu
 
-Trạng thái: Phản ánh migration 0002–0009
-Cập nhật lần cuối: 2026-09-24
+Trạng thái: Phản ánh migration 0002–0014 ở mức report overview
+Cập nhật lần cuối: 2026-09-25
 
 ERD chỉ hiển thị các cột quan trọng để hình còn đọc được. SQL migration là
-nguồn sự thật cho toàn bộ cột, constraint và index.
+nguồn sự thật cho toàn bộ cột, constraint và index. Các migration `0010`–`0014`
+đã bổ sung Operator audit, cancellation, onboarding approval, payment provider
+baseline và onboarding idempotency receipts; các bảng này phải được đối chiếu
+khi render bản ERD đầy đủ.
 
 ## D-16 — Identity và Driver
 

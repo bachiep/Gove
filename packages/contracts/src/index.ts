@@ -52,10 +52,56 @@ export const tripStates = [
 ] as const;
 export type TripState = (typeof tripStates)[number];
 
+/**
+ * Product-level cancellation reasons shared by Customer, Driver, and Operator
+ * cancellation commands. `OTHER` is deliberately retained for a concise,
+ * validated explanation when no fixed reason applies.
+ */
+export const cancellationReasonCodes = [
+  'CHANGE_OF_PLANS',
+  'DRIVER_DELAY',
+  'DRIVER_REQUESTED_CANCELLATION',
+  'SAFETY_CONCERN',
+  'VEHICLE_ISSUE',
+  'OTHER',
+] as const;
+export type CancellationReasonCode = (typeof cancellationReasonCodes)[number];
+
+export const cancellationActorRoles = [
+  'CUSTOMER',
+  'DRIVER',
+  'OPERATOR',
+] as const;
+export type CancellationActorRole = (typeof cancellationActorRoles)[number];
+
+export const tripCancellationRuleCodes = [
+  'CUSTOMER_PRE_TRIP',
+  'CUSTOMER_AT_PICKUP',
+  'DRIVER_AT_PICKUP',
+  'OPERATOR_PRE_TRIP',
+  'OPERATOR_ASSIGNED',
+  'OPERATOR_IN_PROGRESS',
+] as const;
+export type TripCancellationRuleCode =
+  (typeof tripCancellationRuleCodes)[number];
+
 export interface RideLocation {
   label: string;
   latitude: number;
   longitude: number;
+}
+
+export interface FareQuoteRoute {
+  geometry: {
+    type: 'LineString';
+    coordinates: readonly (readonly [number, number])[];
+  };
+  provider: string;
+  version: string;
+  updatedAt: string;
+  usedFallback: boolean;
+  fallbackReason:
+    'PRIMARY_NOT_CONFIGURED' | 'PRIMARY_ERROR' | 'PRIMARY_TIMEOUT' | null;
 }
 
 export interface FareQuoteResponse {
@@ -68,6 +114,8 @@ export interface FareQuoteResponse {
   currency: string;
   totalFareMinor: number;
   expiresAt: string;
+  /** Optional for replay compatibility with receipts created before routing provenance was exposed. */
+  route?: FareQuoteRoute;
 }
 
 export interface TripResponse {
@@ -87,6 +135,27 @@ export interface TripDetailResponse extends TripResponse {
   actualDurationSeconds: number | null;
   finalFareMinor: number | null;
   completedAt: string | null;
+}
+
+export interface ActiveTripResponse extends TripDetailResponse {
+  pickup: RideLocation;
+  dropoff: RideLocation;
+}
+
+/**
+ * PII-minimized cancellation record exposed to the Trip owner or assigned
+ * Driver. The optional free-text reason is intentionally not part of API or
+ * realtime response contracts.
+ */
+export interface TripCancellationSummary {
+  cancelledByRole: CancellationActorRole;
+  reasonCode: CancellationReasonCode;
+  ruleCode: TripCancellationRuleCode;
+  cancelledAt: string;
+}
+
+export interface CancelTripResponse extends TripDetailResponse {
+  cancellation: TripCancellationSummary;
 }
 
 export const driverWorkStates = [
@@ -158,12 +227,16 @@ export const paymentStatuses = [
 ] as const;
 export type PaymentStatus = (typeof paymentStatuses)[number];
 
+export const paymentProviders = ['SIMULATOR', 'MOMO', 'SEPAY'] as const;
+export type PaymentProvider = (typeof paymentProviders)[number];
+
 export interface PaymentAttemptResponse {
   id: string;
   tripId: string;
   attemptNumber: number;
   amountMinor: number;
   currency: string;
+  provider: PaymentProvider;
   status: PaymentStatus;
   providerReference: string | null;
   failureCode: string | null;
@@ -173,6 +246,44 @@ export interface PaymentAttemptResponse {
 
 export interface TripHistoryItem extends TripDetailResponse {
   paymentStatus: PaymentStatus | null;
+}
+
+/**
+ * Deliberately PII-minimized Trip state record for the Operator diagnostic
+ * timeline. Customer, Driver, location, payment, and free-text reason data
+ * are intentionally excluded from this read model.
+ */
+export interface OperatorTripTimelineTransition {
+  command: string;
+  fromState: TripState | null;
+  toState: TripState;
+  fromVersion: number | null;
+  toVersion: number;
+  correlationId: string;
+  createdAt: string;
+}
+
+export interface OperatorDiagnosticAuditSummary {
+  id: string;
+  action: 'DIAGNOSTIC_REVIEW';
+  correlationId: string;
+  createdAt: string;
+}
+
+export interface OperatorTripDiagnosticTimelineResponse {
+  trip: {
+    id: string;
+    state: TripState;
+    version: number;
+    createdAt: string;
+    updatedAt: string;
+  };
+  transitions: OperatorTripTimelineTransition[];
+  diagnosticAudits: OperatorDiagnosticAuditSummary[];
+}
+
+export interface OperatorDiagnosticAuditResponse extends OperatorDiagnosticAuditSummary {
+  reason: string;
 }
 
 export const deliveryStates = [
@@ -197,6 +308,16 @@ export interface DeliveryResponse {
   parcelDescription: string;
   declaredWeightGrams: number;
   createdAt: string;
+}
+
+export interface DeliveryRealtimeSnapshot extends DeliveryResponse {
+  driverId: string | null;
+  /**
+   * Optional because older snapshot producers only return assignment data.
+   * A producer may include the latest persisted location when available;
+   * streamed `delivery.driver.location` messages remain the live update path.
+   */
+  driverLocation?: DriverLocationSnapshot | null;
 }
 
 export type DeliveryOfferState = 'PENDING' | 'ACCEPTED' | 'EXPIRED';

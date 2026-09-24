@@ -1,7 +1,7 @@
 # Sơ Đồ Kiến Trúc
 
 Trạng thái: Implementation hiện tại nếu không có ghi chú khác
-Cập nhật lần cuối: 2026-09-24
+Cập nhật lần cuối: 2026-09-25
 
 ## D-01 — Bối cảnh hệ thống
 
@@ -75,6 +75,7 @@ flowchart TB
     dispatch[Dispatch]
     payment[Payment]
     delivery[Delivery]
+    operator[Operator Diagnostics and Audit]
     realtime[Realtime]
     database[(Owned PostgreSQL Schemas)]
 
@@ -88,6 +89,8 @@ flowchart TB
     dispatch -->|Assignment commands| trip
     trip -->|Final Fare| payment
     delivery -->|Shared work-state coordination| dispatch
+    operator -->|Audited diagnostics and onboarding review| trip
+    operator -->|Audited approval actions| driver
     trip -->|Snapshots and outbox| realtime
     location -->|Latest Location| realtime
 

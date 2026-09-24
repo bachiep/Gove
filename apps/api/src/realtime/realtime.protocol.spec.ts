@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { realtimeClientMessageSchema } from './realtime.protocol.js';
 
 describe('realtimeClientMessageSchema', () => {
-  it('accepts authentication, subscription, ping, and valid location messages', () => {
+  it('accepts authentication, mixed aggregate subscription, ping, and valid location messages', () => {
     expect(
       realtimeClientMessageSchema.safeParse({
         type: 'authenticate',
@@ -14,6 +14,7 @@ describe('realtimeClientMessageSchema', () => {
       realtimeClientMessageSchema.safeParse({
         type: 'subscribe',
         tripIds: ['00000000-0000-4000-8000-000000000001'],
+        deliveryIds: ['00000000-0000-4000-8000-000000000002'],
       }).success,
     ).toBe(true);
     expect(
@@ -23,8 +24,8 @@ describe('realtimeClientMessageSchema', () => {
       realtimeClientMessageSchema.safeParse({
         type: 'location',
         location: {
-          latitude: 10.76,
-          longitude: 106.68,
+          latitude: 21.0285,
+          longitude: 105.8048,
           accuracyMeters: 4,
           sequenceNumber: 1,
         },
@@ -44,10 +45,17 @@ describe('realtimeClientMessageSchema', () => {
     ).toBe(false);
     expect(
       realtimeClientMessageSchema.safeParse({
+        type: 'subscribe',
+        tripIds: [],
+        deliveryIds: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      realtimeClientMessageSchema.safeParse({
         type: 'location',
         location: {
           latitude: 91,
-          longitude: 106.68,
+          longitude: 105.8048,
           accuracyMeters: 4,
           sequenceNumber: 1,
         },

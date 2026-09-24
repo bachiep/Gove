@@ -66,6 +66,14 @@ export class DeliveryController {
     });
   }
 
+  @Get('active')
+  @ApiOperation({ summary: 'List current Customer active Deliveries' })
+  listActiveForCustomer(
+    @CurrentActor() actor: SessionActor,
+  ): Promise<DeliveryResponse[]> {
+    return this.deliveries.listActiveForCustomer(actor.id);
+  }
+
   @Get(':deliveryId')
   @ApiOperation({ summary: 'Read one Customer-owned Delivery' })
   findForCustomer(

@@ -205,6 +205,27 @@ export class DeliveryRepository {
     return result.rows.map(toDeliveryResponse);
   }
 
+  async listActiveForCustomer(
+    customerUserId: string,
+  ): Promise<DeliveryResponse[]> {
+    const result = await this.database.query<DeliveryDetailRow>(
+      `SELECT id, state, version, pickup_label,
+              ST_X(pickup_location::geometry) AS pickup_longitude,
+              ST_Y(pickup_location::geometry) AS pickup_latitude,
+              dropoff_label,
+              ST_X(dropoff_location::geometry) AS dropoff_longitude,
+              ST_Y(dropoff_location::geometry) AS dropoff_latitude,
+              recipient_display_name, parcel_description, declared_weight_grams,
+              created_at
+       FROM delivery.deliveries
+       WHERE customer_user_id = $1
+         AND state IN ('REQUESTED', 'MATCHING', 'DRIVER_TO_PICKUP', 'AT_PICKUP', 'IN_TRANSIT')
+       ORDER BY created_at DESC, id DESC`,
+      [customerUserId],
+    );
+    return result.rows.map(toDeliveryResponse);
+  }
+
   async findForDriver(
     driverUserId: string,
     deliveryId: string,
@@ -322,6 +343,18 @@ export class DeliveryRepository {
         version,
         input.correlationId,
       );
+      await appendDeliveryOutboxEvent(
+        executor,
+        input.deliveryId,
+        version,
+        'delivery.matching.started',
+        {
+          deliveryId: input.deliveryId,
+          customerUserId: input.customerUserId,
+          state: 'MATCHING',
+          version,
+        },
+      );
       const offer = await reserveOffer(executor, input.deliveryId, version);
       const response: DeliveryMatchResponse = {
         deliveryId: input.deliveryId,
@@ -344,6 +377,17 @@ export class DeliveryRepository {
           version,
           version + 1,
           input.correlationId,
+        );
+        await appendDeliveryOutboxEvent(
+          executor,
+          input.deliveryId,
+          version + 1,
+          'delivery.no_driver_available',
+          {
+            deliveryId: input.deliveryId,
+            state: 'NO_DRIVER_AVAILABLE',
+            version: version + 1,
+          },
         );
       }
       await executor.query(
@@ -437,6 +481,18 @@ export class DeliveryRepository {
         offer.delivery_version,
         nextVersion,
         input.correlationId,
+      );
+      await appendDeliveryOutboxEvent(
+        executor,
+        offer.delivery_id,
+        nextVersion,
+        'delivery.driver.assigned',
+        {
+          deliveryId: offer.delivery_id,
+          driverUserId: input.driverUserId,
+          state: 'DRIVER_TO_PICKUP',
+          version: nextVersion,
+        },
       );
       return {
         ...toOfferResponse(offer),
@@ -644,6 +700,17 @@ export class DeliveryRepository {
             nextVersion,
             randomUUID(),
           );
+          await appendDeliveryOutboxEvent(
+            executor,
+            offer.delivery_id,
+            nextVersion,
+            'delivery.no_driver_available',
+            {
+              deliveryId: offer.delivery_id,
+              state: 'NO_DRIVER_AVAILABLE',
+              version: nextVersion,
+            },
+          );
         }
         return true;
       });
@@ -821,6 +888,27 @@ async function appendTransition(
       fromVersion,
       toVersion,
       correlationId,
+    ],
+  );
+}
+
+async function appendDeliveryOutboxEvent(
+  executor: import('../database/database.service.js').DatabaseExecutor,
+  deliveryId: string,
+  aggregateVersion: number,
+  eventType: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  await executor.query(
+    `INSERT INTO delivery.outbox_events (
+       id, delivery_id, aggregate_version, event_type, payload
+     ) VALUES ($1, $2, $3, $4, $5)`,
+    [
+      randomUUID(),
+      deliveryId,
+      aggregateVersion,
+      eventType,
+      JSON.stringify(payload),
     ],
   );
 }

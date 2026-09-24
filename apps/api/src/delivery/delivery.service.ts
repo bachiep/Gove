@@ -74,6 +74,10 @@ export class DeliveryService {
     return this.repository.listForCustomer(customerUserId);
   }
 
+  listActiveForCustomer(customerUserId: string): Promise<DeliveryResponse[]> {
+    return this.repository.listActiveForCustomer(customerUserId);
+  }
+
   async findForDriver(
     driverUserId: string,
     deliveryId: string,

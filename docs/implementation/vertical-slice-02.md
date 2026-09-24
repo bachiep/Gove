@@ -10,8 +10,8 @@ Allow an authenticated Customer to obtain an expiring Fare Quote and create exac
 ## Scope
 
 - Customer-only quote and Trip creation commands.
-- Manual pickup and dropoff labels plus coordinates inside a synthetic urban demo zone.
-- Deterministic straight-line distance and configured duration estimate.
+- Manual pickup and dropoff labels plus coordinates inside a synthetic inner-Hanoi demo zone.
+- A routing-provider estimate with explicit coordinate fallback provenance.
 - Versioned service types and rate cards, amounts in integer VND units, and bounded surge.
 - Server-side quote expiry, single-use quote consumption, Trip version `0`, creation transition, and transactional outbox record.
 - REST contracts and a responsive PWA flow that accurately displays an estimated quote and `REQUESTED` result.
@@ -33,7 +33,7 @@ The unique `trip.fare_quote_id` constraint makes quote consumption single-use ev
 
 ## Initial demo policy
 
-The service area is a synthetic coordinate rectangle bounded by latitude `10.7400..10.8200` and longitude `106.6400..106.7400`; labels are user-entered demo text and are not addresses. A quote rejects coordinates outside this zone or identical pickup/dropoff points.
+The service area is a synthetic inner-Hanoi coordinate rectangle bounded by latitude `20.9800..21.1000` and longitude `105.7600..105.9000`; labels are user-entered demo text and are not verified addresses. A quote rejects coordinates outside this zone or identical pickup/dropoff points. When OSRM is unavailable, the API returns a clearly marked coordinate fallback estimate rather than claiming road routing.
 
 Initial service types are `MOTORBIKE_STANDARD` and `CAR_STANDARD`. Each has an idempotently seeded, immutable MVP rate-card version. The seed expresses policy for an academic demo only; it is not a market-price claim.
 

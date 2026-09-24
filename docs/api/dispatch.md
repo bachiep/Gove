@@ -66,8 +66,15 @@ best-effort process-local and the database transaction remains authoritative.
 
 `GET /api/v1/dispatch/offers/me` lists the current Driver's pending Offers.
 `GET /api/v1/dispatch/trips/current` returns the active Assignment as a
-`TripDetailResponse`, and `GET /api/v1/drivers/me/work-state` returns the
-current Driver Work State.
+`ActiveTripResponse` (including pickup/dropoff coordinates), and
+`GET /api/v1/drivers/me/work-state` returns the current Driver Work State.
+
+When the Driver Console has an active Trip or Delivery and the browser grants
+permission, it sends foreground `GPS` samples to
+`PUT /api/v1/drivers/me/location` with a monotonic sequence and a client-side
+throttle aligned with the server's three-second rate limit. The UI labels
+permission, delivery, and failure states explicitly; it does not claim
+background tracking.
 
 The assigned Driver advances the lifecycle with the arrival, start, and
 completion commands documented in [completion and settlement](completion-and-settlement.md).
@@ -77,7 +84,9 @@ Driver Work State, and idempotency receipt in one transaction.
 ## Current limitations
 
 - Reassignment is currently one bounded synchronous retry; a general retry policy and explicit Driver rejection reason are not implemented.
-- Driver approval is still an operator/database setup concern; there is no operator approval API.
+- Driver profile and Vehicle approval/rejection are exposed through the Operator
+  onboarding API. Pending-review listing and idempotent review commands remain
+  under closure.
 - The customer PWA displays the current Trip state, Trip version, completion
   metering, final fare, and WebSocket connection status. The Driver PWA has a
   bounded foreground console for Offers and lifecycle commands; it does not

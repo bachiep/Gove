@@ -37,6 +37,14 @@ describe('Payment and history HTTP seam', () => {
     expect(first.statusCode).toBe(201);
     expect(replay.statusCode).toBe(201);
     expect(replay.json()).toEqual(first.json());
+    const explicitSuccessReplay = await capture(
+      customer.accessToken,
+      trip.id,
+      captureKey,
+      'SUCCEEDED',
+    );
+    expect(explicitSuccessReplay.statusCode).toBe(201);
+    expect(explicitSuccessReplay.json()).toEqual(first.json());
     expect(first.json()).toMatchObject({
       tripId: trip.id,
       attemptNumber: 1,
@@ -132,10 +140,11 @@ describe('Payment and history HTTP seam', () => {
       status: 'SUCCEEDED',
     });
 
+    const unknownDriver = await createDriver('Unknown Payment Driver');
     const unknownTrip = await completeTrip(
       (await registerAndLogin('CUSTOMER', 'Unknown Payment Customer'))
         .accessToken,
-      driver,
+      unknownDriver,
     );
     const unknown = await capture(
       unknownTrip.customerToken,
@@ -157,10 +166,11 @@ describe('Payment and history HTTP seam', () => {
     expect(unknownRetry.statusCode).toBe(409);
     expect(unknownRetry.json().code).toBe('PAYMENT_RECONCILIATION_REQUIRED');
 
+    const pendingDriver = await createDriver('Pending Payment Driver');
     const pendingTrip = await completeTrip(
       (await registerAndLogin('CUSTOMER', 'Pending Payment Customer'))
         .accessToken,
-      driver,
+      pendingDriver,
     );
     const pending = await capture(
       pendingTrip.customerToken,
@@ -178,7 +188,69 @@ describe('Payment and history HTTP seam', () => {
     );
     expect(pendingRetry.statusCode).toBe(409);
     expect(pendingRetry.json().code).toBe('PAYMENT_PENDING');
-  });
+  }, 15_000);
+
+  it('creates one pending attempt for each selected external provider without accepting secrets', async () => {
+    const driver = await createDriver('Provider Selection Driver');
+    const momoTrip = await completeTrip(
+      (await registerAndLogin('CUSTOMER', 'MoMo Payment Customer')).accessToken,
+      driver,
+    );
+
+    const momo = await capturePayload(
+      momoTrip.customerToken,
+      momoTrip.id,
+      randomUUID(),
+      { provider: 'MOMO' },
+    );
+    expect(momo.statusCode).toBe(201);
+    expect(momo.json()).toMatchObject({
+      provider: 'MOMO',
+      status: 'PENDING',
+      providerReference: null,
+      failureCode: null,
+    });
+
+    const malformed = await capturePayload(
+      momoTrip.customerToken,
+      momoTrip.id,
+      randomUUID(),
+      { provider: 'MOMO', apiSecret: 'must-not-be-accepted' },
+    );
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json()).toMatchObject({ code: 'VALIDATION_FAILED' });
+
+    const simulatedExternal = await capturePayload(
+      momoTrip.customerToken,
+      momoTrip.id,
+      randomUUID(),
+      { provider: 'MOMO', simulationOutcome: 'SUCCEEDED' },
+    );
+    expect(simulatedExternal.statusCode).toBe(400);
+    expect(simulatedExternal.json()).toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+
+    const sepayDriver = await createDriver('SePay Provider Selection Driver');
+    const sepayTrip = await completeTrip(
+      (await registerAndLogin('CUSTOMER', 'SePay Payment Customer'))
+        .accessToken,
+      sepayDriver,
+    );
+    const sepay = await capturePayload(
+      sepayTrip.customerToken,
+      sepayTrip.id,
+      randomUUID(),
+      { provider: 'SEPAY' },
+    );
+    expect(sepay.statusCode).toBe(201);
+    expect(sepay.json()).toMatchObject({
+      provider: 'SEPAY',
+      status: 'PENDING',
+      providerReference: null,
+      failureCode: null,
+    });
+  }, 15_000);
 
   async function createDriver(displayName: string) {
     await setAllAvailableDriversOffline();
@@ -211,18 +283,11 @@ describe('Payment and history HTTP seam', () => {
     finalFareMinor: number;
     customerToken: string;
   }> {
-    const location = await server.inject({
-      method: 'PUT',
-      url: '/api/v1/drivers/me/location',
-      headers: { authorization: `Bearer ${driver.accessToken}` },
-      payload: {
-        latitude: 10.76,
-        longitude: 106.68,
-        accuracyMeters: 10,
-        source: 'SIMULATOR',
-        sequenceNumber: ++locationSequence,
-      },
-    });
+    let location = await sendLocation(driver.accessToken);
+    if (location.statusCode === 429) {
+      await waitForLocationWindow();
+      location = await sendLocation(driver.accessToken);
+    }
     expect(location.statusCode).toBe(200);
     const online = await server.inject({
       method: 'PUT',
@@ -230,7 +295,7 @@ describe('Payment and history HTTP seam', () => {
       headers: { authorization: `Bearer ${driver.accessToken}` },
       payload: { state: 'AVAILABLE' },
     });
-    expect(online.statusCode).toBe(200);
+    expect(online.statusCode, online.body).toBe(200);
 
     const quote = await server.inject({
       method: 'POST',
@@ -240,11 +305,15 @@ describe('Payment and history HTTP seam', () => {
         'idempotency-key': randomUUID(),
       },
       payload: {
-        pickup: { label: 'Payment pickup', latitude: 10.76, longitude: 106.68 },
+        pickup: {
+          label: 'Payment pickup',
+          latitude: 21.0285,
+          longitude: 105.8048,
+        },
         dropoff: {
           label: 'Payment dropoff',
-          latitude: 10.78,
-          longitude: 106.7,
+          latitude: 21.033,
+          longitude: 105.835,
         },
         serviceType: 'MOTORBIKE_STANDARD',
       },
@@ -300,6 +369,25 @@ describe('Payment and history HTTP seam', () => {
     };
   }
 
+  async function waitForLocationWindow(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 3_500));
+  }
+
+  function sendLocation(accessToken: string) {
+    return server.inject({
+      method: 'PUT',
+      url: '/api/v1/drivers/me/location',
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: {
+        latitude: 21.0285,
+        longitude: 105.8048,
+        accuracyMeters: 10,
+        source: 'SIMULATOR',
+        sequenceNumber: ++locationSequence,
+      },
+    });
+  }
+
   async function transition(
     accessToken: string,
     tripId: string,
@@ -329,6 +417,27 @@ describe('Payment and history HTTP seam', () => {
         'idempotency-key': idempotencyKey,
       },
       payload: { simulationOutcome },
+    });
+  }
+
+  async function capturePayload(
+    accessToken: string,
+    tripId: string,
+    idempotencyKey: string,
+    payload: {
+      provider: 'MOMO' | 'SEPAY';
+      apiSecret?: string;
+      simulationOutcome?: string;
+    },
+  ) {
+    return await server.inject({
+      method: 'POST',
+      url: `/api/v1/payments/trips/${tripId}/capture`,
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'idempotency-key': idempotencyKey,
+      },
+      payload,
     });
   }
 

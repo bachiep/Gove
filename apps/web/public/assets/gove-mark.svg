@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Gove</title>
+  <rect width="64" height="64" rx="18" fill="#1D4ED8"/>
+  <path d="M43.5 22.5A16.2 16.2 0 1 0 47 38" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/>
+  <path d="M32 32h15.5v12.5" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="47.5" cy="45" r="5" fill="#FBBF24" stroke="#1D4ED8" stroke-width="2.5"/>
+</svg>

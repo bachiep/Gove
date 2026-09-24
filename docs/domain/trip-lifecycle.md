@@ -1,6 +1,6 @@
 # Trip Lifecycle
 
-Status: Tested
+Status: Partially tested
 Last updated: 2026-09-24
 
 ## Trip states
@@ -70,6 +70,29 @@ Reassignment is one database transaction: verify the expected Trip and Assignmen
 5. Every accepted command records actor, timestamp, previous state, next state, and correlation ID.
 6. Live events carry Trip ID and version; clients discard older or duplicate versions.
 
+## Customer cancellation
+
+The implemented Customer command is `POST /api/v1/trips/:tripId/cancel`. It
+accepts only a Customer who owns the Trip, requires an idempotency key and
+records a reason. It is currently allowed from `REQUESTED`, `MATCHING`,
+`DRIVER_TO_PICKUP`, and `AT_PICKUP`; `IN_PROGRESS` and terminal states are
+rejected. The command records `CANCEL_TRIP`, advances the Trip version, writes
+one `trip.cancellations` audit record, and appends `trip.cancelled` in the same
+database transaction. The MVP rule does not create or alter a payment attempt
+or cancellation fee.
+
+The current repository implementation also contains cleanup paths. From
+`MATCHING`, it revokes pending Offers, releases active Reservations, and returns
+the reserved Driver to `AVAILABLE`. From `DRIVER_TO_PICKUP` or `AT_PICKUP`, it
+cancels the active Assignment and returns its Driver from `TO_PICKUP` to
+`AVAILABLE`. These paths are implementation evidence only at present: their
+integration, race, and invariant tests are still pending. The same caution
+applies to cancellation racing an offer acceptance, offer expiry, reassignment,
+arrival, or Trip start.
+
+Driver-initiated and Operator-initiated Ride cancellation are not implemented.
+Neither Customer nor Driver frontend/browser cancellation flow is verified.
+
 ## Implemented evidence
 
 The pure Trip transition function and its transition matrix are implemented in
@@ -78,5 +101,9 @@ increments, terminal-state rejection, and invalid commands. M3/M4 integration
 tests verify persistence, authorization, assignment acceptance, realtime
 events, and reconnect snapshots. M5 integration tests verify the Driver-owned
 `AT_PICKUP → IN_PROGRESS → COMPLETED` path, duplicate completion, final fare
-calculation, and Driver Work State restoration. Cancellation rules remain
-planned and are not represented as an implemented endpoint.
+calculation, and Driver Work State restoration.
+
+The Trip integration suite verifies Customer-owned `REQUESTED → CANCELLED` and
+idempotent replay of the same cancellation command. It does not yet prove
+matching/assigned cleanup, idempotency-key reuse with changed input, terminal
+state rejection, realtime delivery/reconnect, or cancellation races.

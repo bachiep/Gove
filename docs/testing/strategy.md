@@ -18,6 +18,14 @@ Correctness evidence is organized around module interfaces and business invarian
 | Security    | Authentication, ownership, role, rate, input, secret, and log-redaction behavior                                   | Negative tests, scans, and public-port review              |
 | Performance | Measured demo workload and regression comparison                                                                   | Raw results plus summarized percentiles and resources      |
 
+The API test command deliberately runs with one Vitest worker. Integration suites
+use a real PostgreSQL database and create isolated identities per test, but the
+local/CI database is shared by the suite rather than recreated for every worker.
+Serial file execution prevents unrelated fixtures from changing candidate
+availability between tests and keeps the result reproducible. Concurrency
+behavior is still tested inside individual cases with parallel HTTP commands and
+database invariant checks; this setting does not remove those race scenarios.
+
 ## Mandatory race scenarios
 
 1. Two Trips contend for one available Driver.

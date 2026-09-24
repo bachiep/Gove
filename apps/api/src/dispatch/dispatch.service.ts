@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type {
+  ActiveTripResponse,
   DispatchMatchResponse,
   DispatchOfferRejectionResponse,
   TripDetailResponse,
@@ -42,7 +43,7 @@ export class DispatchService {
 
   async findCurrentAssignedTrip(
     driverUserId: string,
-  ): Promise<TripDetailResponse | null> {
+  ): Promise<ActiveTripResponse | null> {
     return this.repository.findCurrentAssignedTrip(driverUserId);
   }
 
@@ -74,6 +75,9 @@ export class DispatchService {
     try {
       const result = await this.repository.acceptOffer({
         ...input,
+        requestFingerprint: createHash('sha256')
+          .update(JSON.stringify({ offerId: input.offerId }))
+          .digest(),
         correlationId: input.correlationId ?? randomUUID(),
       });
       if (!result.accepted) {
@@ -153,7 +157,8 @@ export class DispatchService {
     const messages: Record<DispatchCommandError['code'], string> = {
       TRIP_NOT_FOUND: 'The Trip was not found for this Customer.',
       TRIP_NOT_MATCHABLE: 'The Trip is not available for matching.',
-      DRIVER_NOT_ELIGIBLE: 'The Driver is not eligible to go online.',
+      DRIVER_NOT_ELIGIBLE:
+        'Tài khoản Tài xế chưa đủ điều kiện để bật trạng thái nhận chuyến.',
       DRIVER_WORK_STATE_CONFLICT:
         'The Driver has an active operational commitment.',
       OFFER_NOT_FOUND: 'The Trip Offer was not found.',

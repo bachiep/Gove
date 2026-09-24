@@ -3,6 +3,11 @@
 Status: Designed
 Last updated: 2026-09-24
 
+Map implementation note: the Customer request flow has a locally implemented
+Leaflet projection with a provider-failure fallback. Road routing, live Driver
+markers, and ETA remain separate milestones; the UI must not imply they are
+already available.
+
 ## Direction
 
 Gove uses a mobile-first, map-aware interface with a minimal Swiss-style hierarchy: clear typography, high contrast, restrained decoration, and progressive disclosure. Customer and Driver flows prioritize one primary action per state. Operator views use denser desktop layouts with list-first fallbacks.
@@ -42,6 +47,34 @@ Colors never communicate state alone. Icons, labels, and text accompany every st
 - No layout-shifting hover or press transforms.
 - `prefers-reduced-motion` removes non-essential movement and preserves the final state.
 - GPS updates do not animate or announce continuously; semantic Trip changes do.
+
+### Visual assets and interaction references
+
+- The Gove mark is a project-owned SVG: its open route-shaped `G` ends at a
+  yellow destination point. The mark is used for the application header and
+  favicon; it must retain sufficient contrast at 32 CSS pixels and is never
+  substituted with a third-party mobility brand mark.
+- The Home hero uses the project-owned `gove-route-city-bg.webp` as a low-contrast
+  background layer. It is decorative only, has no text or brand marks, and is
+  hidden behind the content layer so it cannot reduce form readability.
+- Product icons use Phosphor vector icons. Raster images are not used for
+  controls, status indicators, or the Gove brand mark.
+- Motion is limited to entrance, hover, press, and a restrained route-preview
+  pulse. It must not suggest that GPS or road routing is live before those
+  capabilities are implemented and verified.
+- The information hierarchy takes cues from Vietnamese mobility and delivery
+  products: service-first entry points, a single obvious primary action,
+  compact status labels, and progressive detail after the user chooses a
+  service. These are interaction patterns, not copied visual assets.
+
+Reference products reviewed for information architecture:
+
+- [Grab Vietnam](https://www.grab.com/vn/) — unified mobility and delivery
+  service navigation.
+- [be Consumer](https://be.com.vn/en/consumer/) — clear ride and delivery
+  service grouping for Vietnamese users.
+- [Xanh SM](https://www.xanhsm.com/) — mobility-focused trust and service
+  presentation.
 
 ## Screen inventory
 

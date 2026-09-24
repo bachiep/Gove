@@ -1,0 +1,196 @@
+{
+  "version": 8,
+  "name": "Gove local vector preview",
+  "metadata": {
+    "gove:purpose": "Deterministic local MapLibre browser acceptance only",
+    "gove:limitation": "Not a production basemap or road-routing dataset"
+  },
+  "sources": {
+    "gove-preview": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": { "kind": "water" },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [105.8487, 21.0278],
+                  [105.8506, 21.0282],
+                  [105.8513, 21.027],
+                  [105.8502, 21.0259],
+                  [105.8486, 21.0263],
+                  [105.8487, 21.0278]
+                ]
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": { "kind": "park" },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [105.8557, 21.026],
+                  [105.8587, 21.026],
+                  [105.8587, 21.0245],
+                  [105.8557, 21.0245],
+                  [105.8557, 21.026]
+                ]
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": { "kind": "road", "class": "primary" },
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [105.8395, 21.0244],
+                [105.845, 21.0244],
+                [105.85, 21.0245],
+                [105.855, 21.0245],
+                [105.86, 21.0245]
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": { "kind": "road", "class": "primary" },
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [105.854, 21.0205],
+                [105.854, 21.0245],
+                [105.854, 21.029],
+                [105.854, 21.033]
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": { "kind": "road", "class": "secondary" },
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [105.841, 21.0225],
+                [105.845, 21.026],
+                [105.85, 21.03],
+                [105.856, 21.032]
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": { "kind": "road", "class": "secondary" },
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [105.847, 21.0205],
+                [105.847, 21.0245],
+                [105.847, 21.0295],
+                [105.847, 21.033]
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": { "kind": "road", "class": "minor" },
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [105.8395, 21.027],
+                [105.845, 21.027],
+                [105.85, 21.027],
+                [105.86, 21.027]
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": { "kind": "road", "class": "minor" },
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [105.842, 21.021],
+                [105.842, 21.025],
+                [105.842, 21.03],
+                [105.842, 21.033]
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "layers": [
+    {
+      "id": "gove-background",
+      "type": "background",
+      "paint": { "background-color": "#eef4fb" }
+    },
+    {
+      "id": "gove-water",
+      "type": "fill",
+      "source": "gove-preview",
+      "filter": ["==", ["get", "kind"], "water"],
+      "paint": { "fill-color": "#b9def2", "fill-opacity": 0.9 }
+    },
+    {
+      "id": "gove-park",
+      "type": "fill",
+      "source": "gove-preview",
+      "filter": ["==", ["get", "kind"], "park"],
+      "paint": { "fill-color": "#cde9d2", "fill-opacity": 0.85 }
+    },
+    {
+      "id": "gove-minor-roads",
+      "type": "line",
+      "source": "gove-preview",
+      "filter": [
+        "all",
+        ["==", ["get", "kind"], "road"],
+        ["==", ["get", "class"], "minor"]
+      ],
+      "paint": {
+        "line-color": "#ffffff",
+        "line-width": 2.5,
+        "line-opacity": 0.95
+      }
+    },
+    {
+      "id": "gove-secondary-roads",
+      "type": "line",
+      "source": "gove-preview",
+      "filter": [
+        "all",
+        ["==", ["get", "kind"], "road"],
+        ["==", ["get", "class"], "secondary"]
+      ],
+      "paint": {
+        "line-color": "#d4dce8",
+        "line-width": 4,
+        "line-opacity": 0.95
+      }
+    },
+    {
+      "id": "gove-primary-roads",
+      "type": "line",
+      "source": "gove-preview",
+      "filter": [
+        "all",
+        ["==", ["get", "kind"], "road"],
+        ["==", ["get", "class"], "primary"]
+      ],
+      "paint": {
+        "line-color": "#b5c2d3",
+        "line-width": 6,
+        "line-opacity": 0.95
+      }
+    }
+  ]
+}

@@ -28,9 +28,9 @@ Redis may hold Latest Location geo entries, connection routing, short-lived rate
 ## Realtime read projection
 
 Realtime is a delivery adapter, not a business-entity owner. Its read-only
-snapshot query may compose Trip, Dispatch, and Location-owned rows into one
-`TripRealtimeSnapshot` because a reconnect requires a consistent customer-facing
-view. The query does not write those tables or reimplement their state
+snapshot query may compose Trip, Delivery, Dispatch, and Location-owned rows
+into `TripRealtimeSnapshot` or `DeliveryRealtimeSnapshot` because a reconnect
+requires a consistent customer-facing view. The query does not write those tables or reimplement their state
 transitions; commands continue to use the owning module interfaces and
 transactions. If this projection becomes a scaling boundary, it must move to an
 explicit versioned read model rather than adding cross-module writes.

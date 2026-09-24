@@ -1,12 +1,23 @@
 # Bộ Tài Liệu Phục Vụ Báo Cáo
 
 Trạng thái: Đang cập nhật
-Cập nhật lần cuối: 2026-09-24
+Cập nhật lần cuối: 2026-09-25
 
 Thư mục này là nguồn tài liệu kỹ thuật để viết báo cáo học thuật. Nội dung ở
 đây không thay thế bản thuyết minh hoàn chỉnh; nó cung cấp sơ đồ đã đối chiếu,
 tham chiếu schema, vị trí bằng chứng và ánh xạ chương để mọi nhận định trong báo
 cáo đều có thể truy ngược tới implementation.
+
+## Quy tắc chọn evidence hiện tại
+
+Các snapshot mang ngày 2026-09-24 trong `docs/testing` và `docs/report` là tài
+liệu lịch sử, đã bị evidence ngày 2026-09-25 supersede khi mô tả trạng thái hiện
+tại. Người viết báo cáo phải ưu tiên [Sổ Đăng Ký Bằng Chứng](evidence-register.md),
+[Browser Acceptance Record 2026-09-25](../testing/browser-acceptance-2026-09-25.md)
+và [Migration Replay Evidence 2026-09-25](../testing/migration-replay-2026-09-25.md).
+[`benchmark-smoke-2026-09-24.md`](../testing/benchmark-smoke-2026-09-24.md) vẫn
+chỉ là smoke measurement lịch sử; chưa có benchmark capacity 2026-09-25 thay
+thế nó.
 
 ## Nội dung
 
@@ -22,6 +33,12 @@ cáo đều có thể truy ngược tới implementation.
   tranh chấp Driver.
 - [Sơ đồ dữ liệu](diagrams/data-model.md): các ERD tách theo bounded context và
   được suy ra từ SQL migration.
+- [Sơ đồ Map và Routing](diagrams/map-and-routing.md): provider seam,
+  coordinate fallback và route provenance.
+- [Sơ đồ Operator và Audit](diagrams/operator-and-audit.md): diagnostics,
+  onboarding review và idempotency receipt.
+- [Sơ đồ Verification Gates](diagrams/verification-gates.md): cách nối
+  requirement với evidence trước khi đưa claim vào báo cáo.
 - [Tham chiếu cơ sở dữ liệu](database-reference.md): migration, invariant SQL và
   nội dung dùng cho chương cài đặt.
 - [Danh mục API và event](api-and-event-catalog.md): endpoint, role, mục đích,
@@ -32,6 +49,8 @@ cáo đều có thể truy ngược tới implementation.
   nghiệm thu và chụp bằng chứng.
 - [Hướng dẫn bằng chứng](evidence-guide.md): được phép kết luận điều gì và artifact
   nào chứng minh kết luận đó.
+- [Sổ đăng ký bằng chứng](evidence-register.md): checklist traceability theo
+  claim, chương báo cáo và gate nghiệm thu; không ghi activity log.
 
 ## Quy tắc quản lý sơ đồ
 
@@ -43,6 +62,11 @@ trạng thái hoặc bằng chứng không tồn tại trong repository.
 Mỗi sơ đồ phải ghi rõ nó mô tả implementation hiện tại, thiết kế đã chấp nhận
 hay phần việc còn dự kiến. Không được trình bày nội dung Planned như nội dung đã
 Implemented.
+
+Danh mục sơ đồ phải bao gồm cả các boundary kỹ thuật phát sinh trong quá trình
+implementation. Hiện tại routing/map, Operator/audit và verification gates
+được lập thành D-19–D-21; trạng thái evidence của chúng vẫn phải đọc cùng
+acceptance matrix.
 
 Phần thuyết minh và chú thích học thuật được viết bằng tiếng Việt. Tên kỹ thuật
 bên trong sơ đồ như component, actor, state, command, event, endpoint, bảng,

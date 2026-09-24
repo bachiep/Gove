@@ -10,6 +10,10 @@ The public API is prefixed with `/api/v1`. All error responses use the stable sh
 - A successful login or refresh returns a short-lived bearer access token in the response body.
 - The refresh token is an opaque value held only in the `gove_refresh` HttpOnly, `SameSite=Strict` cookie scoped to `/api/v1/auth`.
 - The web client holds the access token in memory. It does not persist either token in web storage.
+- On application mount, the web client calls `POST /auth/refresh` once to
+  restore the in-memory access token after a reload. A shared bootstrap promise
+  deduplicates React development remounts so rotating refresh sessions are not
+  accidentally replayed by the same tab.
 - Refresh and logout reject a supplied `Origin` other than configured `WEB_ORIGIN`. An absent Origin is allowed for non-browser clients and is documented as a hardening follow-up.
 
 ## Public endpoints
@@ -42,4 +46,4 @@ Driver registration creates a pending profile. Adding a vehicle does not select 
 
 ## Verified locally
 
-The API integration suite exercises concurrent Driver registration with one idempotency key, idempotent replay, login, authenticated identity read, refresh rotation, logout, rejected post-logout refresh, and rejection of public operator registration. The suite ran successfully with 26 API tests on 2026-09-24.
+The API integration suite exercises concurrent Driver registration with one idempotency key, idempotent replay, login, authenticated identity read, refresh rotation, logout, rejected post-logout refresh, and rejection of public operator registration. The current repository gate ran successfully with 25 API test files and 148 tests on 2026-09-25. Browser Harness also verified that a Customer session is restored after navigating to `/account` again at the configured `http://localhost:5173` origin; the same flow is intentionally rejected for an unconfigured `127.0.0.1` origin.

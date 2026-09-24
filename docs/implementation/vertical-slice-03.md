@@ -80,14 +80,14 @@ environment. They are policy choices, not performance claims, and must be
 validated with controlled integration tests before being described as suitable for
 another workload.
 
-| Configuration                         | Proposed default | Rule                                                                                                                  |
-| ------------------------------------- | ---------------: | --------------------------------------------------------------------------------------------------------------------- |
-| `DISPATCH_LOCATION_FRESHNESS_SECONDS` |     `15` seconds | A Driver is eligible only when the latest accepted location has a server-recognized `received_at` within this window. |
-| `DISPATCH_OFFER_TTL_SECONDS`          |     `10` seconds | The Offer and its Reservation share one absolute expiry deadline.                                                     |
-| `DISPATCH_MAX_OFFER_ATTEMPTS`         |              `3` | Maximum sequential candidate offers before the request is exhausted.                                                  |
-| `DISPATCH_SEARCH_DEADLINE_SECONDS`    |     `30` seconds | Hard deadline for the initial matching attempt, measured using the database transaction clock.                        |
-| `DISPATCH_SEARCH_RADIUS_METERS`       |    `5000` meters | Initial candidate-generation radius around pickup; it is not a route-distance promise.                                |
-| `DISPATCH_MAX_CANDIDATES`             |             `20` | Upper bound on a candidate batch returned to the ranking step.                                                        |
+| Configuration                         | Proposed default | Rule                                                                                                                                   |
+| ------------------------------------- | ---------------: | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `DISPATCH_LOCATION_FRESHNESS_SECONDS` |     `15` seconds | A Driver is eligible only when the latest accepted location has a server-recognized `received_at` within this window.                  |
+| `DISPATCH_OFFER_TTL_SECONDS`          |     `20` seconds | The Offer and its Reservation share one absolute expiry deadline; this leaves enough time for the Driver Console to render and accept. |
+| `DISPATCH_MAX_OFFER_ATTEMPTS`         |              `3` | Maximum sequential candidate offers before the request is exhausted.                                                                   |
+| `DISPATCH_SEARCH_DEADLINE_SECONDS`    |     `30` seconds | Hard deadline for the initial matching attempt, measured using the database transaction clock.                                         |
+| `DISPATCH_SEARCH_RADIUS_METERS`       |    `5000` meters | Initial candidate-generation radius around pickup; it is not a route-distance promise.                                                 |
+| `DISPATCH_MAX_CANDIDATES`             |             `20` | Upper bound on a candidate batch returned to the ranking step.                                                                         |
 
 Freshness is a safety and eligibility rule, not a statement that GPS is delivered
 every 15 seconds or that matching completes within any latency target. The rule
@@ -100,6 +100,10 @@ Offer expiry and Reservation expiry are checked against a consistent database
 clock inside the transaction that decides acceptance, rejection, or expiry. A
 worker is allowed to process an overdue record late; it must still persist the
 expired outcome rather than treating the worker's schedule as the source of time.
+An expiry is a versioned `MATCHING → MATCHING` transition: it records the
+resolved Offer, releases the reservation, advances the Trip version, and only
+then creates a replacement Offer. This prevents two sequential expiry attempts
+from colliding in the Trip transactional outbox.
 
 ## Candidate generation and ranking
 
@@ -254,10 +258,13 @@ tests and recorded as evidence:
   validation, and non-mutation of the input list.
 - HTTP integration tests cover location ingestion, eligibility-gated availability,
   persisted matching replay, one-offer creation, concurrent acceptance, accepted
-  Driver Work State, overdue Offer release, and stale-location no-driver result.
-- Asynchronous outbox consumption, operator approval, and a full Driver-facing
-  Offer UI remain planned. Customer Trip status and the realtime gateway are
-  delivered in Vertical Slice 04.
+  Driver Work State, overdue Offer release, repeated expiry/reassignment outbox
+  records, and stale-location no-driver result.
+- Asynchronous outbox consumption and a full Driver-facing Offer UI remain
+  planned. Operator approval/rejection is now implemented and covered by the
+  Operator integration seam; pending-review listing and browser evidence remain
+  open. Customer Trip status and the realtime gateway are delivered in Vertical
+  Slice 04.
 
 ## Verification status
 

@@ -8,6 +8,9 @@ PWA Nginx container, a migration job, and PostgreSQL/PostGIS. The API and
 database are private to the Compose network. Only the PWA Nginx port is bound
 to loopback by default, so a VPS must terminate public TLS at a separately
 configured reverse proxy or explicitly change the binding after firewall review.
+An optional OSRM service is available only with the `osrm` profile; it uses an
+operator-supplied external read-only Docker volume and is never published as a
+host port. See [Optional OSRM staging seam](osrm-staging.md).
 
 ## Preconditions
 
@@ -28,6 +31,11 @@ AUTH_JWT_SECRET=at-least-32-characters
 AUTH_REFRESH_PEPPER=at-least-32-characters
 WEB_ORIGIN=https://demo.example.edu
 GOVE_HTTP_PORT=8080
+# Optional only after the external OSRM volume has been prepared:
+# OSRM_VOLUME_NAME=gove-staging-osrm-data
+# OSRM_DATASET=hanoi-latest
+# OSRM_ALGORITHM=mld
+# ROUTING_OSRM_BASE_URL=http://osrm:5000/
 ```
 
 `WEB_ORIGIN` must be the browser origin used by the reverse proxy. It is an
@@ -42,6 +50,12 @@ docker compose --env-file /secure/path/gove.env -f compose.staging.yaml ps
 curl --fail http://127.0.0.1:8080/api/v1/health/live
 curl --fail http://127.0.0.1:8080/api/v1/health/ready
 ```
+
+For the default fallback mode, leave `ROUTING_OSRM_BASE_URL` unset and run
+the command above unchanged. For the opt-in OSRM mode, run
+`tools/operations/staging-preflight.sh /secure/path/gove.env --osrm` first and
+then add `--profile osrm` to each Compose command. The preflight does not
+download or prepare map data.
 
 The migration job must show a successful one-shot exit before the API starts.
 The health checks prove only local process and dependency readiness; run the
@@ -72,5 +86,6 @@ performed.
 Application rollback means redeploying the prior known-good commit/image. Do
 not roll back a database by deleting the volume. Migrations are additive in the
 current project; an incompatible future migration requires an expand-and-
-contract plan before release. Restore is a separate operation into a new
-database, documented in [Backup and restore](backup-and-restore.md).
+database, documented in [Backup and restore](backup-and-restore.md). The local
+image-replacement rehearsal is documented in [Local application rollback
+rehearsal](rollback-rehearsal.md).

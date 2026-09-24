@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
-import type { PaymentAttemptResponse, PaymentStatus } from '@gove/contracts';
+import type {
+  PaymentAttemptResponse,
+  PaymentProvider,
+  PaymentStatus,
+} from '@gove/contracts';
 import type { QueryResultRow } from 'pg';
 
 import {
@@ -15,6 +19,7 @@ interface PaymentAttemptRow extends QueryResultRow {
   attempt_number: number;
   amount_minor: string;
   currency: string;
+  provider: PaymentProvider;
   status: PaymentStatus;
   provider_reference: string | null;
   failure_code: string | null;
@@ -50,7 +55,10 @@ export class PaymentRepository {
     idempotencyKey: string;
     requestFingerprint: Buffer;
     correlationId: string;
-    simulationOutcome: PaymentStatus;
+    provider: PaymentProvider;
+    status: PaymentStatus;
+    providerReference: string | null;
+    failureCode: string | null;
   }): Promise<PaymentAttemptResponse> {
     return this.database.transaction(async (executor) => {
       await executor.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
@@ -101,7 +109,7 @@ export class PaymentRepository {
       }
 
       const latestResult = await executor.query<PaymentAttemptRow>(
-        `SELECT id, trip_id, attempt_number, amount_minor, currency, status,
+        `SELECT id, trip_id, attempt_number, amount_minor, currency, provider, status,
                 provider_reference, failure_code, requested_at, resolved_at
          FROM payment.payment_attempts
          WHERE trip_id = $1
@@ -123,21 +131,13 @@ export class PaymentRepository {
 
       const attemptId = randomUUID();
       const attemptNumber = (latest?.attempt_number ?? 0) + 1;
-      const providerReference =
-        input.simulationOutcome === 'SUCCEEDED' ? `sim-${randomUUID()}` : null;
-      const failureCode =
-        input.simulationOutcome === 'FAILED'
-          ? 'SIMULATED_FAILURE'
-          : input.simulationOutcome === 'UNKNOWN'
-            ? 'SIMULATED_TIMEOUT'
-            : null;
       const attemptResult = await executor.query<PaymentAttemptRow>(
         `INSERT INTO payment.payment_attempts (
            id, trip_id, customer_user_id, attempt_number, amount_minor,
-           currency, status, provider_reference, failure_code, resolved_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-                   CASE WHEN $7 = 'PENDING' THEN NULL ELSE now() END)
-         RETURNING id, trip_id, attempt_number, amount_minor, currency, status,
+           currency, provider, status, provider_reference, failure_code, resolved_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                   CASE WHEN $8 = 'PENDING' THEN NULL ELSE now() END)
+         RETURNING id, trip_id, attempt_number, amount_minor, currency, provider, status,
                    provider_reference, failure_code, requested_at, resolved_at`,
         [
           attemptId,
@@ -146,9 +146,10 @@ export class PaymentRepository {
           attemptNumber,
           trip.final_fare_minor,
           trip.currency,
-          input.simulationOutcome,
-          providerReference,
-          failureCode,
+          input.provider,
+          input.status,
+          input.providerReference,
+          input.failureCode,
         ],
       );
       const attempt = attemptResult.rows[0] as PaymentAttemptRow;
@@ -162,12 +163,13 @@ export class PaymentRepository {
           randomUUID(),
           attempt.id,
           input.tripId,
-          `payment.${input.simulationOutcome.toLowerCase()}`,
+          `payment.${input.status.toLowerCase()}`,
           JSON.stringify({
             tripId: input.tripId,
             paymentAttemptId: attempt.id,
             attemptNumber,
-            status: input.simulationOutcome,
+            provider: input.provider,
+            status: input.status,
             amountMinor: Number(trip.final_fare_minor),
             currency: trip.currency,
             correlationId: input.correlationId,
@@ -192,7 +194,7 @@ export class PaymentRepository {
     tripId: string;
   }): Promise<PaymentAttemptResponse> {
     const result = await this.database.query<PaymentAttemptRow>(
-      `SELECT p.id, p.trip_id, p.attempt_number, p.amount_minor, p.currency,
+      `SELECT p.id, p.trip_id, p.attempt_number, p.amount_minor, p.currency, p.provider,
               p.status, p.provider_reference, p.failure_code,
               p.requested_at, p.resolved_at
        FROM payment.payment_attempts p
@@ -223,6 +225,7 @@ function toPaymentAttemptResponse(
     attemptNumber: row.attempt_number,
     amountMinor: safeInteger(row.amount_minor, 'amount_minor'),
     currency: row.currency,
+    provider: row.provider,
     status: row.status,
     providerReference: row.provider_reference,
     failureCode: row.failure_code,
