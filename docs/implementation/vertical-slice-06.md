@@ -1,4 +1,4 @@
-# Vertical Slice 06 — Delivery Foundation
+# Vertical Slice 06 — Parcel Delivery
 
 Status: Partially implemented and tested locally
 Last updated: 2026-09-24
@@ -32,13 +32,17 @@ the Driver to enter bounded confirmation text; it does not fabricate proof.
 ## Remaining M7 path
 
 ```text
-Delivery Request
-  → Delivery matching and exclusive Driver reservation
-  → Driver accepts
-  → Customer Delivery PWA flow and rebuildable realtime status
+Customer Delivery creation UI
+  → authoritative Customer status/history
+  → rebuildable Delivery realtime projection
+  → cross-domain contention and browser acceptance
 ```
 
 Offer expiry releases the Driver and currently closes the Delivery with
 `NO_DRIVER_AVAILABLE`. Bounded retry/reassignment is intentionally deferred;
 it must remain Delivery-owned rather than attaching Delivery to Trip-only
 foreign keys.
+
+Delivery payment, cancellation, multi-stop routing, cash collection, and proof
+media are outside the frozen first slice. Their absence does not block M7, but
+the UI and realtime items above do.

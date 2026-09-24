@@ -5,17 +5,17 @@ Last updated: 2026-09-24
 
 One PostgreSQL cluster is used initially, but tables and writes remain module-owned. Cross-module reads use module interfaces or explicit read projections; callers do not update another module's tables.
 
-| Data                                                                                | Owner            | Other modules receive                                                       |
-| ----------------------------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------- |
-| User, credential, role, refresh session                                             | Identity         | Actor ID and authorized roles                                               |
-| Driver profile, Vehicle, and eligibility                                            | Driver           | Driver ID and eligibility result                                            |
-| Latest Location and freshness                                                       | Location         | Nearby candidate IDs and location projection                                |
-| Pricing rule and Fare Quote                                                         | Pricing          | Quote ID, expiry, rule version, amount breakdown                            |
-| Trip, transition history, completion metering, and final fare                       | Trip             | Trip detail snapshot and versioned domain events                            |
-| Dispatch Request, Driver Work State, Driver Reservation, Trip Offer, and Assignment | Dispatch         | Candidate demand, work-state result, assignment result, and dispatch events |
-| Payment Attempt, command receipt, and settlement outbox                             | Payment          | Settlement result and versioned events                                      |
-| Notification Delivery Attempt and live subscription                                 | Notification     | Delivery status only                                                        |
-| Outbox record                                                                       | Producing module | Immutable event envelope                                                    |
+| Data                                                                                 | Owner            | Other modules receive                                                       |
+| ------------------------------------------------------------------------------------ | ---------------- | --------------------------------------------------------------------------- |
+| User, credential, role, refresh session                                              | Identity         | Actor ID and authorized roles                                               |
+| Driver profile, Vehicle, and eligibility                                             | Driver           | Driver ID and eligibility result                                            |
+| Latest Location and freshness                                                        | Location         | Nearby candidate IDs and location projection                                |
+| Pricing rule and Fare Quote                                                          | Pricing          | Quote ID, expiry, rule version, amount breakdown                            |
+| Trip, transition history, completion metering, and final fare                        | Trip             | Trip detail snapshot and versioned domain events                            |
+| Dispatch Request, Driver Work State, Driver Reservation, Trip Offer, and Assignment  | Dispatch         | Candidate demand, work-state result, assignment result, and dispatch events |
+| Payment Attempt, command receipt, and settlement outbox                              | Payment          | Settlement result and versioned events                                      |
+| Delivery, transition, reservation, offer, assignment, custody proof, receipt, outbox | Delivery         | Privacy-safe Delivery snapshot and versioned events                         |
+| Outbox record                                                                        | Producing module | Immutable event envelope                                                    |
 
 ## Transaction rule
 
@@ -43,3 +43,11 @@ metering and final fare fields; the fare is calculated from the immutable quote
 snapshot by the Pricing policy. Payment owns attempts and payment command
 receipts. History reads compose these owned records without allowing a caller
 to write another module's tables.
+
+## Delivery boundary
+
+Delivery owns parcel, recipient, custody, proof, Delivery reservations,
+offers, assignments, transitions, receipts, and outbox records. Dispatch owns
+the shared Driver work-state row used to prevent simultaneous active Trip and
+Delivery work. Delivery commands may coordinate that row transactionally but
+must not attach Delivery semantics to Trip tables.

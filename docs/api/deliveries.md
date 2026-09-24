@@ -78,9 +78,14 @@ caller returns `404 DELIVERY_NOT_FOUND`, avoiding assignment disclosure.
 Both projections are derived from durable Delivery offer/assignment records;
 the PWA must not infer them from client-side state.
 
-## Not implemented yet
+## Remaining contract work
 
-Driver/customer status projections, history, payment, realtime Delivery
-projections, offer retry/reassignment, cancellation rules, and PWA screens
-remain M7 work. They must use Delivery records rather than changing Trip
-semantics.
+Customer history and Driver status projections are implemented. Customer
+Delivery creation/detail UI and realtime Delivery snapshot/events remain
+required for M7 completion. They must use authoritative Delivery records rather
+than changing Trip semantics.
+
+Payment, offer retry/reassignment, cancellation rules, and proof media are
+explicitly outside the frozen first Delivery slice. Adding any of them later
+requires its own rules, idempotency behavior, authorization, and acceptance
+evidence.

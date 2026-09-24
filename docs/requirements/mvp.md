@@ -1,11 +1,18 @@
 # MVP Requirements
 
-Status: Draft
+Status: Accepted
 Last updated: 2026-09-24
 
 ## Product boundary
 
 The MVP proves one complete ride lifecycle for three roles through a responsive web application. Customer and Driver flows are mobile-first; Operator workflows are desktop-first. Driver tracking is foreground-only in the PWA and must never be represented as reliable background tracking.
+
+This scope is frozen for academic completion. Changes require an updated
+requirement, acceptance scenario, and architecture decision when they alter a
+domain or operational boundary. The separate parcel Delivery extension is
+defined in [M7 logistics requirements](logistics-m7.md). The project-wide
+completion claim is defined in
+[Completion definition](../project/completion-definition.md).
 
 ## Functional requirements
 

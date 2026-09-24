@@ -5,18 +5,30 @@ Last updated: 2026-09-24
 
 Each milestone exits only when its acceptance evidence is recorded. Dates are intentionally omitted until delivery capacity and the demo deadline are known.
 
-Current milestone: **M6 Hardening and Demo Deployment — in progress.** M0–M5 are implemented and tested locally. M5 adds Driver lifecycle commands, immutable-snapshot final fare calculation, idempotent payment simulation, terminal history, and customer/driver PWA surfaces. M6 now includes a process-local authentication rate limiter, reproducible API load-generator baseline, verified local Compose deployment, and a clean-database backup/restore drill. Observability, representative closed-loop benchmarks, VPS/TLS deployment, rollback rehearsal, and logistics remain.
+Current work: **M6 hardening and M7 logistics closure.** M0–M5 are
+implemented and tested locally. M6 has local rate limits, a load-tool baseline,
+a locally verified Compose deployment, and a clean-database restore drill. M7
+has a separate Delivery aggregate, exclusive cross-domain Driver work state,
+offer acceptance and expiry, custody/proof lifecycle, Customer history API, and
+Driver Console workflow. Remaining work is governed by the
+[completion plan](completion-plan.md).
 
-| Milestone                        | Outcome                                                                                                      | Exit evidence                                                                                                                        |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| M0 Foundation                    | Repository, documentation baseline, monorepo, CI, and local infrastructure                                   | Clean build; lint and unit test commands; PostgreSQL/PostGIS health check; documentation review                                      |
-| M1 Identity and Driver Profile   | Registration, login, roles, Driver profile, Vehicle, and authorization                                       | Auth integration tests; ownership tests; secret scan; synthetic browser identities; rate-limit evidence                              |
-| M2 Ride Request and Pricing      | Validated Pickup/Dropoff, Service Type, expiring Fare Quote, idempotent Trip creation, and customer PWA flow | Contract tests; pricing unit tests; duplicate-request test; migration replay; local browser smoke evidence                           |
-| M3 Dispatch and Acceptance       | Nearby eligible candidates, exclusive reservation, offer expiry, accept/reject, and no-driver result         | Dispatch integration tests cover reservation, acceptance, rejection/reassignment, expiry worker, and stale-driver outcome            |
-| M4 Real-Time Trip                | Authenticated WebSocket, Driver location updates, reconnect snapshot, and live Trip status                   | Realtime integration tests; Web build; clean-tab browser smoke; process-local metrics endpoint                                       |
-| M5 Completion and Settlement     | Trip completion, final Fare, idempotent Payment simulation, and history                                      | State-transition tests; duplicate capture test; customer/driver history integration; web production build                            |
-| M6 Hardening and Demo Deployment | Rate limits, observability, load generator, backup/restore, TLS, deploy and rollback                         | Security review; benchmark report; restore drill; staging smoke test; rollback drill                                                 |
-| M7 Logistics Extension           | Separate Delivery model with pickup, recipient, parcel, proof, and delivery lifecycle                        | In progress: Delivery request/read foundation and ownership tests; exit requires dispatch, custody/proof, realtime, and PWA evidence |
+| Milestone                        | Outcome                                                                                                      | Exit evidence                                                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| M0 Foundation                    | Repository, documentation baseline, monorepo, CI, and local infrastructure                                   | Clean build; lint and unit test commands; PostgreSQL/PostGIS health check; documentation review                           |
+| M1 Identity and Driver Profile   | Registration, login, roles, Driver profile, Vehicle, and authorization                                       | Auth integration tests; ownership tests; secret scan; synthetic browser identities; rate-limit evidence                   |
+| M2 Ride Request and Pricing      | Validated Pickup/Dropoff, Service Type, expiring Fare Quote, idempotent Trip creation, and customer PWA flow | Contract tests; pricing unit tests; duplicate-request test; migration replay; local browser smoke evidence                |
+| M3 Dispatch and Acceptance       | Nearby eligible candidates, exclusive reservation, offer expiry, accept/reject, and no-driver result         | Dispatch integration tests cover reservation, acceptance, rejection/reassignment, expiry worker, and stale-driver outcome |
+| M4 Real-Time Trip                | Authenticated WebSocket, Driver location updates, reconnect snapshot, and live Trip status                   | Realtime integration tests; Web build; clean-tab browser smoke; process-local metrics endpoint                            |
+| M5 Completion and Settlement     | Trip completion, final Fare, idempotent Payment simulation, and history                                      | State-transition tests; duplicate capture test; customer/driver history integration; web production build                 |
+| M6 Hardening and Demo Deployment | Rate limits, observability, load generator, backup/restore, deploy and rollback                              | In progress: representative benchmark, security review, browser staging smoke and rollback rehearsal remain               |
+| M7 Logistics Extension           | Separate Delivery model with pickup, recipient, parcel, proof, and delivery lifecycle                        | In progress: Customer PWA and rebuildable realtime status remain; backend lifecycle and Driver Console are tested locally |
+| M8 Final Verification            | Frozen-scope acceptance, evidence review, reproducible demo and handover                                     | Acceptance matrix closed; clean-checkout check; demo runbook pass; known limitations and final status reviewed            |
+
+VPS, public DNS, and TLS/WSS are a deployment profile, not a hidden
+requirement for local academic completion. When infrastructure is supplied,
+they are required before the project may claim `Deployed`; otherwise the final
+claim remains `Verified locally`.
 
 ## Architecture evolution gates
 

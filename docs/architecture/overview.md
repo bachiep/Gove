@@ -5,7 +5,12 @@ Last updated: 2026-09-24
 
 ## Runtime shape
 
-Gove begins as a modular monolith with one deployable application process and one responsive PWA. The application exposes versioned REST interfaces and an authenticated WebSocket interface. PostgreSQL 17 with PostGIS owns durable state. Redis is optional until the real-time milestone and then stores only rebuildable, expiring projections and pub-sub messages.
+Gove is a modular monolith with one deployable application process and one
+responsive PWA. The application exposes versioned REST interfaces and an
+authenticated WebSocket interface. PostgreSQL 17 with PostGIS owns durable
+state. Redis is not required by the current single-process implementation; if
+later introduced, it may store only rebuildable, expiring projections and
+pub-sub messages.
 
 ```text
 Customer / Driver / Operator PWA
@@ -15,8 +20,8 @@ Customer / Driver / Operator PWA
   ┌──────────────────────────────┐
   │ Identity   Driver   Location │
   │ Pricing    Trip     Dispatch │
-  │ Payment    Notification      │
-  │ Outbox     Observability     │
+  │ Payment    Delivery          │
+  │ Realtime   Health / logging  │
   └──────────────────────────────┘
        | transactions     | derived TTL/pub-sub
        v                  v
@@ -27,18 +32,21 @@ Customer / Driver / Operator PWA
 
 Each module owns a small interface and hides persistence, invariants, retries, and error mapping behind it. Callers test through the same seam they use in production.
 
-| Module       | Interface responsibility                                                    | Hidden implementation                                    |
-| ------------ | --------------------------------------------------------------------------- | -------------------------------------------------------- |
-| Identity     | Authenticate, authorize, resolve actor                                      | Password hashing, token rotation, credential persistence |
-| Driver       | Manage profile, Vehicle, and eligibility                                    | Approval rules and ownership constraints                 |
-| Location     | Accept Latest Location and query fresh nearby Drivers                       | Validation, PostGIS query, optional Redis geo projection |
-| Pricing      | Create and validate Fare Quotes; finalize Fare                              | Rule versions, rounding, bounded surge policy            |
-| Trip         | Create Trip and execute lifecycle commands                                  | Aggregate versioning, transition log, cancellation rules |
-| Dispatch     | Own Dispatch Request, Driver Work State, Reservation, Offer, and Assignment | Candidate ranking, TTL, transactional contention         |
-| Payment      | Authorize/capture through a provider seam                                   | Idempotency, unknown outcome, reconciliation records     |
-| Notification | Deliver semantic user notifications                                         | WebSocket routing and later delivery adapters            |
+| Module   | Interface responsibility                                                    | Hidden implementation                                    |
+| -------- | --------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Identity | Authenticate, authorize, resolve actor                                      | Password hashing, token rotation, credential persistence |
+| Driver   | Manage profile, Vehicle, and eligibility                                    | Approval rules and ownership constraints                 |
+| Location | Accept Latest Location and query fresh nearby Drivers                       | Validation, PostGIS query, optional Redis geo projection |
+| Pricing  | Create and validate Fare Quotes; finalize Fare                              | Rule versions, rounding, bounded surge policy            |
+| Trip     | Create Trip and execute lifecycle commands                                  | Aggregate versioning, transition log, cancellation rules |
+| Dispatch | Own Dispatch Request, Driver Work State, Reservation, Offer, and Assignment | Candidate ranking, TTL, transactional contention         |
+| Payment  | Capture through a simulator/provider seam                                   | Idempotency and persisted attempt outcomes               |
+| Delivery | Own parcel request, reservation, assignment, custody, proof and history     | Delivery versioning, command receipts and privacy        |
+| Realtime | Authenticate subscriptions and deliver rebuildable live projections         | WebSocket protocol, snapshots and process-local metrics  |
 
-Identity and IDs are shared kernel types; business entities are not shared mutable models. Delivery will become a separate context and may reuse only stable value types and external seams.
+Identity and IDs are shared kernel types; business entities are not shared
+mutable models. Delivery is a separate context and reuses only stable value
+types plus the shared exclusive Driver work-state boundary.
 
 ## Communication
 

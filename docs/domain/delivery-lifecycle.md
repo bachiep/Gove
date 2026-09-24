@@ -33,9 +33,12 @@ Terminal states are `DELIVERED`, `CANCELLED`, and `NO_DRIVER_AVAILABLE`.
 | `AT_PICKUP`        | `IN_TRANSIT`       | Assigned Driver         | Pickup custody confirmation is present.                           |
 | `IN_TRANSIT`       | `DELIVERED`        | Assigned Driver         | Recipient handoff and required Delivery Proof are present.        |
 
-Cancellation, expiry, reassignment, version checks, command receipts, and
-outbox writes follow the same correctness principles as ride Dispatch, but use
-Delivery-owned records and Delivery versioning.
+Expiry, version checks, command receipts, and outbox writes follow the same
+correctness principles as ride Dispatch, but use Delivery-owned records and
+Delivery versioning. `CANCELLED` is reserved in the state model; cancellation
+commands and rules are deferred from the frozen first Delivery slice and must
+not be presented as implemented. Reassignment is also deferred; an expired
+offer currently closes the Delivery as `NO_DRIVER_AVAILABLE`.
 
 ## M7 proof boundary
 
