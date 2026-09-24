@@ -47,6 +47,7 @@ Documentation records intended behavior and verified evidence. It must distingui
 | [Authentication boundary](security/authentication-and-authorization.md) | Implemented identity controls and limitations     | Tested locally |
 | [Identity and driver data](data/identity-driver-schema.md)              | M1 ownership, schema, and migration rules         | Implemented    |
 | [Domain data schema](data/domain-schema.md)                             | Ride, dispatch, payment, and Delivery persistence | Implemented    |
+| [Report evidence pack](report/README.md)                                | Diagrams, SQL, evidence, and report chapter map   | Active         |
 
 ## Architecture decisions
 
