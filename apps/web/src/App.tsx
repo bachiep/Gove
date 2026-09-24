@@ -1512,8 +1512,9 @@ function DriverConsolePage({
         <p className="eyebrow">Khu vực Tài xế</p>
         <h1>Điều phối chuyến được giao.</h1>
         <p>
-          Bảng điều khiển đồng bộ với API mỗi 3 giây. Đây chưa phải tính năng
-          theo dõi GPS nền.
+          Bảng điều khiển đồng bộ với API mỗi 3 giây. Theo dõi GPS nền đang được
+          phát triển; hiện tại Gove chỉ gửi vị trí khi màn hình này mở và bạn
+          cho phép chia sẻ.
         </p>
         <button className="back-link" type="button" onClick={onAccount}>
           <ArrowLeft aria-hidden="true" size={18} /> Tài khoản
@@ -1589,8 +1590,8 @@ function DriverConsolePage({
               <div className="notice location-sharing-panel">
                 <strong>Chia sẻ vị trí khi đang nhận đơn</strong>
                 <span>
-                  Gove chỉ gửi GPS khi màn hình này đang mở và bạn cho phép;
-                  không theo dõi vị trí nền.
+                  Theo dõi GPS nền đang được phát triển. Gove chỉ gửi GPS khi
+                  màn hình này đang mở và bạn cho phép chia sẻ vị trí.
                 </span>
                 <button
                   className="secondary-link"
@@ -1777,8 +1778,8 @@ function DriverConsolePage({
               <div className="notice location-sharing-panel">
                 <strong>Chia sẻ vị trí khi đang nhận chuyến</strong>
                 <span>
-                  Gove chỉ gửi GPS khi màn hình này đang mở và bạn cho phép;
-                  không theo dõi vị trí nền.
+                  Theo dõi GPS nền đang được phát triển. Gove chỉ gửi GPS khi
+                  màn hình này đang mở và bạn cho phép chia sẻ vị trí.
                 </span>
                 <button
                   className="secondary-link"
