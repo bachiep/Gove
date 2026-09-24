@@ -216,6 +216,44 @@ export class DeliveryRepository {
     return row ? toDeliveryResponse(row) : null;
   }
 
+  async listPendingOffers(
+    driverUserId: string,
+  ): Promise<DeliveryOfferResponse[]> {
+    const result = await this.database.query<OfferRow>(
+      `SELECT o.id, o.delivery_id, o.driver_user_id, o.attempt_number, o.status,
+              o.expires_at, d.state AS delivery_state, d.version AS delivery_version,
+              o.acceptance_idempotency_key
+       FROM delivery.delivery_offers o
+       JOIN delivery.deliveries d ON d.id = o.delivery_id
+       WHERE o.driver_user_id = $1 AND o.status = 'PENDING'
+       ORDER BY o.offered_at ASC, o.id ASC`,
+      [driverUserId],
+    );
+    return result.rows.map(toOfferResponse);
+  }
+
+  async findCurrentForDriver(
+    driverUserId: string,
+  ): Promise<DeliveryResponse | null> {
+    const result = await this.database.query<DeliveryDetailRow>(
+      `SELECT d.id, d.state, d.version, d.pickup_label,
+              ST_X(d.pickup_location::geometry) AS pickup_longitude,
+              ST_Y(d.pickup_location::geometry) AS pickup_latitude,
+              d.dropoff_label,
+              ST_X(d.dropoff_location::geometry) AS dropoff_longitude,
+              ST_Y(d.dropoff_location::geometry) AS dropoff_latitude,
+              d.recipient_display_name, d.parcel_description, d.declared_weight_grams,
+              d.created_at
+       FROM delivery.assignments a
+       JOIN delivery.deliveries d ON d.id = a.delivery_id
+       WHERE a.driver_user_id = $1 AND a.status = 'ACTIVE'
+       ORDER BY a.accepted_at DESC LIMIT 1`,
+      [driverUserId],
+    );
+    const row = result.rows[0];
+    return row ? toDeliveryResponse(row) : null;
+  }
+
   async startMatching(input: {
     customerUserId: string;
     deliveryId: string;

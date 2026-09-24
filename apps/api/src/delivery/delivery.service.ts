@@ -86,6 +86,14 @@ export class DeliveryService {
     );
   }
 
+  listPendingOffers(driverUserId: string): Promise<DeliveryOfferResponse[]> {
+    return this.repository.listPendingOffers(driverUserId);
+  }
+
+  findCurrentForDriver(driverUserId: string): Promise<DeliveryResponse | null> {
+    return this.repository.findCurrentForDriver(driverUserId);
+  }
+
   async startMatching(input: {
     customerUserId: string;
     deliveryId: string;

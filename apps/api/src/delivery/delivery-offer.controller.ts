@@ -36,6 +36,22 @@ export class DeliveryOfferController {
     @Inject(DeliveryService) private readonly deliveries: DeliveryService,
   ) {}
 
+  @Get('delivery-offers/me')
+  @ApiOperation({
+    summary: 'List pending Delivery Offers for the current Driver',
+  })
+  pendingOffers(@CurrentActor() actor: SessionActor) {
+    return this.deliveries.listPendingOffers(actor.id);
+  }
+
+  @Get('delivery-assignments/current')
+  @ApiOperation({
+    summary: 'Read the current assigned Delivery for the Driver',
+  })
+  currentAssignment(@CurrentActor() actor: SessionActor) {
+    return this.deliveries.findCurrentForDriver(actor.id);
+  }
+
   @Get('delivery-assignments/:deliveryId')
   @ApiOperation({ summary: 'Read one Driver-owned Delivery status projection' })
   findForDriver(@CurrentActor() actor: SessionActor, @Param() params: unknown) {

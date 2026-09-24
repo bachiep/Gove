@@ -145,6 +145,16 @@ describe('Delivery HTTP seam', () => {
       offer: { driverId: driver.actorId, status: 'PENDING', attemptNumber: 1 },
     });
 
+    const pendingOffers = await server.inject({
+      method: 'GET',
+      url: '/api/v1/delivery-offers/me',
+      headers: { authorization: `Bearer ${driver.accessToken}` },
+    });
+    expect(pendingOffers.statusCode).toBe(200);
+    expect(pendingOffers.json()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ deliveryId })]),
+    );
+
     const offerId = matching.json().offer.id as string;
     const acceptKey = randomUUID();
     const [accepted, acceptedReplay] = await Promise.all([
@@ -181,6 +191,17 @@ describe('Delivery HTTP seam', () => {
       work_state: 'TO_PICKUP',
       current_delivery_id: deliveryId,
       current_trip_id: null,
+    });
+
+    const currentAssignment = await server.inject({
+      method: 'GET',
+      url: '/api/v1/delivery-assignments/current',
+      headers: { authorization: `Bearer ${driver.accessToken}` },
+    });
+    expect(currentAssignment.statusCode).toBe(200);
+    expect(currentAssignment.json()).toMatchObject({
+      id: deliveryId,
+      state: 'DRIVER_TO_PICKUP',
     });
   });
 
