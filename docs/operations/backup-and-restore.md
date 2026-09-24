@@ -1,6 +1,6 @@
 # PostgreSQL Backup and Restore
 
-Status: Tested locally; historical restore drill completed; current-baseline recovery pending
+Status: Tested locally; current release-baseline recovery completed; off-host recovery pending
 Last updated: 2026-09-25
 
 The scripts in `tools/operations` operate on the local Compose `postgres`
@@ -63,8 +63,7 @@ be treated as secure backup storage.
 The current baseline's empty-database migration replay is verified separately
 with [`replay-migrations.sh`](../../tools/operations/replay-migrations.sh).
 That procedure creates a new `gove_replay_*` database and verifies all
-fourteen migrations plus the ten application schemas; it is not a substitute
-for a current-baseline backup/restore drill.
+fourteen migrations plus the ten application schemas.
 
 Application image rollback is verified separately by the [local rollback
 rehearsal](rollback-rehearsal.md). It keeps the database on the forward schema
@@ -73,11 +72,20 @@ record; it does not reverse migrations or claim external recovery.
 
 ## Current baseline correction
 
-The historical restore drill above predates migration `0014`. The current
-empty-database replay is recorded in
+The historical restore drill above predates migration `0014`. A current
+release-baseline backup/restore drill was completed on 2026-09-25 from commit
+`70f377f`:
+
+- Backup dump: `/tmp/gove-backup-EijpAa/gove-20260924T204847Z.dump`.
+- Backup mode: `600`; dump size: `9060707` bytes.
+- Restore target: `gove_restore_20260925_rc1`.
+- Restore verification: 14 migration rows and 10 application schemas.
+
+The current empty-database replay is recorded in
 [`migration-replay-2026-09-25.md`](../testing/migration-replay-2026-09-25.md)
-and verifies `0001` through `0014`. A backup/restore drill against this current
-baseline is still required before release evidence can be marked complete.
+and verifies `0001` through `0014`. The local recovery gate is therefore
+tested for the release baseline; off-host retention, encryption and VPS
+recovery remain unverified.
 
 ## Current limitation
 

@@ -48,6 +48,23 @@ removes an unrelated Docker resource.
 
 ## Local evidence
 
+On 2026-09-25, the release-baseline rehearsal used candidate commit `70f377f`
+and previous ref `43ee6627e1a3a2bbb5642dc53c2094bef699ac86`. The generated
+project was `gove_rollback_20260924t204905z_596615_19497`. Results:
+
+- Candidate API health: `200`.
+- Previous-image API health after replacement: `200`.
+- Candidate migration runner applied all `14` migrations.
+- Previous-image migration runner completed against the forward-compatible
+  schema without changing the migration registry.
+- Migration versions preserved after rollback: `14`.
+- Synthetic sentinel preserved: exactly one record.
+- Cleanup: generated Compose project, volume, network and images were removed.
+
+This is the current release-baseline evidence. It still does not prove a VPS
+rollback, TLS/WSS behavior, registry availability, web image rollback, backup
+retention, or a production recovery objective.
+
 On 2026-09-24, the final verification run used the candidate working tree and
 previous ref `43ee6627e1a3a2bbb5642dc53c2094bef699ac86`. The generated project
 was `gove_rollback_20260924t074828z_209800_31442`. Results:
@@ -66,9 +83,6 @@ was `gove_rollback_20260924t074828z_209800_31442`. Results:
 The final run completed without a migration retry after the explicit SQL
 readiness check. An earlier run exposed the PostGIS initialization restart
 race; that is why the readiness check and bounded migration retry are part of
-the script. The rehearsal proves local image replacement and forward-schema
-compatibility for the recorded pre-`0013` run only. Rerun it against the
-current fourteen-migration baseline before using it as current release
-evidence. It does not prove a VPS rollback, TLS/WSS behavior,
-registry availability, web image rollback, backup retention, or a production
-recovery objective.
+the script. The historical run remains useful as a record of the earlier
+boundary, but it must not be cited instead of the current fourteen-migration
+evidence above.
