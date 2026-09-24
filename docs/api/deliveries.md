@@ -63,6 +63,16 @@ Requires the assigned Driver. It returns the current durable Delivery status
 projection without the recipient contact phone. A Delivery not assigned to the
 caller returns `404 DELIVERY_NOT_FOUND`, avoiding assignment disclosure.
 
+### Driver dispatch projections
+
+- `GET /api/v1/delivery-offers/me` lists pending Delivery Offers for the
+  authenticated Driver.
+- `GET /api/v1/delivery-assignments/current` returns that Driver's active
+  Delivery or `null`.
+
+Both projections are derived from durable Delivery offer/assignment records;
+the PWA must not infer them from client-side state.
+
 ## Not implemented yet
 
 Driver/customer status projections, history, payment, realtime Delivery
