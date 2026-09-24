@@ -818,6 +818,33 @@ footer span:first-child {
   margin-top: 24px;
 }
 
+.delivery-confirmation {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.delivery-confirmation label {
+  color: #26354b;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.delivery-confirmation input {
+  background: #fbfdff;
+  border: 1px solid #bbc8da;
+  border-radius: 10px;
+  color: var(--ink);
+  min-height: 48px;
+  padding: 0 13px;
+  width: 100%;
+}
+
+.delivery-confirmation input:focus {
+  border-color: var(--brand);
+  outline: 3px solid rgb(37 99 235 / 18%);
+}
+
 .driver-action-row .primary-link,
 .driver-console-card > .primary-link {
   justify-content: center;

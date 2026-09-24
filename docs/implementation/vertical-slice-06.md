@@ -12,6 +12,10 @@ Pickup, confirm custody, and complete recipient handoff with a bounded text
 proof. PostgreSQL records state transitions in the same transaction as each
 state change.
 
+The Driver Console now polls the Delivery offer/current-assignment projections
+and exposes accept, arrival, custody, and recipient handoff commands. It asks
+the Driver to enter bounded confirmation text; it does not fabricate proof.
+
 ## Evidence
 
 - `0007-delivery-foundation.sql` creates Delivery tables without modifying Trip
@@ -31,7 +35,7 @@ state change.
 Delivery Request
   → Delivery matching and exclusive Driver reservation
   → Driver accepts
-  → Rebuildable realtime status and Customer/Driver PWA flows
+  → Customer Delivery PWA flow and rebuildable realtime status
 ```
 
 Offer expiry releases the Driver and currently closes the Delivery with

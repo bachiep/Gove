@@ -3,6 +3,8 @@ import type {
   AuthenticatedActor,
   AuthenticationResponse,
   DispatchMatchResponse,
+  DeliveryOfferResponse,
+  DeliveryResponse,
   DriverWorkState,
   FareQuoteResponse,
   PaymentAttemptResponse,
@@ -755,6 +757,13 @@ function DriverConsolePage({
 }) {
   const [offers, setOffers] = useState<TripOfferResponse[]>([]);
   const [current, setCurrent] = useState<TripDetailResponse | null>(null);
+  const [deliveryOffers, setDeliveryOffers] = useState<DeliveryOfferResponse[]>(
+    [],
+  );
+  const [currentDelivery, setCurrentDelivery] =
+    useState<DeliveryResponse | null>(null);
+  const [custodyConfirmation, setCustodyConfirmation] = useState('');
+  const [recipientProof, setRecipientProof] = useState('');
   const [workState, setWorkState] = useState<DriverWorkState>('OFFLINE');
   const [state, setState] = useState<RequestState>({ state: 'submitting' });
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -764,11 +773,23 @@ function DriverConsolePage({
     let active = true;
     const refresh = async () => {
       try {
-        const [nextOffers, nextCurrent, nextWorkState] = await Promise.all([
+        const [
+          nextOffers,
+          nextCurrent,
+          nextDeliveryOffers,
+          nextDelivery,
+          nextWorkState,
+        ] = await Promise.all([
           request<TripOfferResponse[]>('/dispatch/offers/me', {
             headers: { authorization: `Bearer ${accessToken}` },
           }),
           request<TripDetailResponse | null>('/dispatch/trips/current', {
+            headers: { authorization: `Bearer ${accessToken}` },
+          }),
+          request<DeliveryOfferResponse[]>('/delivery-offers/me', {
+            headers: { authorization: `Bearer ${accessToken}` },
+          }),
+          request<DeliveryResponse | null>('/delivery-assignments/current', {
             headers: { authorization: `Bearer ${accessToken}` },
           }),
           request<{ state: DriverWorkState }>('/drivers/me/work-state', {
@@ -778,6 +799,8 @@ function DriverConsolePage({
         if (!active) return;
         setOffers(nextOffers);
         setCurrent(nextCurrent);
+        setDeliveryOffers(nextDeliveryOffers);
+        setCurrentDelivery(nextDelivery);
         setWorkState(nextWorkState.state);
         setState((current) =>
           current.state === 'submitting' ? { state: 'idle' } : current,
@@ -834,6 +857,30 @@ function DriverConsolePage({
     void command(`/dispatch/offers/${offerId}/accept`, { method: 'POST' });
   };
 
+  const acceptDeliveryOffer = (offerId: string) => {
+    void command(`/delivery-offers/${offerId}/accept`, { method: 'POST' });
+  };
+
+  const transitionDelivery = (action: 'arrive' | 'pickup' | 'complete') => {
+    if (!currentDelivery) return;
+    void command(`/deliveries/${currentDelivery.id}/${action}`, {
+      method: 'POST',
+      ...(action === 'pickup'
+        ? {
+            body: JSON.stringify({
+              custodyConfirmation,
+            }),
+          }
+        : action === 'complete'
+          ? {
+              body: JSON.stringify({
+                recipientProof,
+              }),
+            }
+          : {}),
+    });
+  };
+
   const transition = (action: 'arrive' | 'start' | 'complete') => {
     if (!current) return;
     void command(`/dispatch/trips/${current.id}/${action}`, {
@@ -874,16 +921,147 @@ function DriverConsolePage({
           <button
             className="primary-link"
             type="button"
-            disabled={Boolean(current) || state.state === 'submitting'}
+            disabled={
+              Boolean(current || currentDelivery) ||
+              state.state === 'submitting'
+            }
             onClick={toggleAvailability}
           >
             {workState === 'OFFLINE' ? 'Go online' : 'Go offline'}
           </button>
-          {current ? (
+          {current || currentDelivery ? (
             <p className="notice">
               Availability is controlled by the active trip.
             </p>
           ) : null}
+        </article>
+
+        <article className="account-card driver-console-card">
+          <div className="form-heading">
+            <h2>Delivery offers</h2>
+            <p>
+              Parcel assignments are reserved and accepted separately from
+              trips.
+            </p>
+          </div>
+          {deliveryOffers.length ? (
+            <div className="offer-list">
+              {deliveryOffers.map((offer) => (
+                <div className="offer-row" key={offer.id}>
+                  <div>
+                    <strong>Delivery offer {offer.attemptNumber}</strong>
+                    <span>{offer.deliveryId}</span>
+                  </div>
+                  <button
+                    className="secondary-link"
+                    type="button"
+                    disabled={state.state === 'submitting'}
+                    onClick={() => acceptDeliveryOffer(offer.id)}
+                  >
+                    Accept delivery
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="notice">No pending delivery offers.</p>
+          )}
+        </article>
+
+        <article className="account-card driver-console-card">
+          <div className="form-heading">
+            <h2>Current delivery</h2>
+            <p>
+              Confirm custody and recipient handoff only when they have
+              occurred.
+            </p>
+          </div>
+          {currentDelivery ? (
+            <>
+              <dl className="quote-details">
+                <div>
+                  <dt>State</dt>
+                  <dd>{currentDelivery.state}</dd>
+                </div>
+                <div>
+                  <dt>Parcel</dt>
+                  <dd>{currentDelivery.parcelDescription}</dd>
+                </div>
+                <div>
+                  <dt>Recipient</dt>
+                  <dd>{currentDelivery.recipientDisplayName}</dd>
+                </div>
+              </dl>
+              <div className="driver-action-row">
+                {currentDelivery.state === 'DRIVER_TO_PICKUP' ? (
+                  <button
+                    className="primary-link"
+                    type="button"
+                    onClick={() => transitionDelivery('arrive')}
+                  >
+                    Arrived at pickup
+                  </button>
+                ) : null}
+                {currentDelivery.state === 'AT_PICKUP' ? (
+                  <div className="delivery-confirmation">
+                    <label htmlFor="custody-confirmation">
+                      Custody confirmation
+                    </label>
+                    <input
+                      id="custody-confirmation"
+                      value={custodyConfirmation}
+                      maxLength={120}
+                      onChange={(event) =>
+                        setCustodyConfirmation(event.target.value)
+                      }
+                      placeholder="Describe the received parcel"
+                    />
+                    <button
+                      className="primary-link"
+                      type="button"
+                      disabled={
+                        !custodyConfirmation.trim() ||
+                        state.state === 'submitting'
+                      }
+                      onClick={() => transitionDelivery('pickup')}
+                    >
+                      Confirm parcel custody
+                    </button>
+                  </div>
+                ) : null}
+                {currentDelivery.state === 'IN_TRANSIT' ? (
+                  <div className="delivery-confirmation">
+                    <label htmlFor="recipient-proof">
+                      Recipient handoff proof
+                    </label>
+                    <input
+                      id="recipient-proof"
+                      value={recipientProof}
+                      maxLength={120}
+                      onChange={(event) =>
+                        setRecipientProof(event.target.value)
+                      }
+                      placeholder="Record recipient confirmation"
+                    />
+                    <button
+                      className="primary-link"
+                      type="button"
+                      disabled={
+                        !recipientProof.trim() || state.state === 'submitting'
+                      }
+                      onClick={() => transitionDelivery('complete')}
+                    >
+                      Confirm recipient handoff
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <p className="notice">
+              Accept a delivery offer to begin parcel handling.
+            </p>
+          )}
         </article>
 
         <article className="account-card driver-console-card">
