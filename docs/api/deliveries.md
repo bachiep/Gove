@@ -57,6 +57,12 @@ document. Completion writes proof, closes the assignment, releases the shared
 Driver work state, records a versioned state transition, and writes an outbox
 event in one transaction.
 
+### `GET /api/v1/delivery-assignments/:deliveryId`
+
+Requires the assigned Driver. It returns the current durable Delivery status
+projection without the recipient contact phone. A Delivery not assigned to the
+caller returns `404 DELIVERY_NOT_FOUND`, avoiding assignment disclosure.
+
 ## Not implemented yet
 
 Driver/customer status projections, history, payment, realtime Delivery

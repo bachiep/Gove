@@ -21,7 +21,8 @@ state change.
   a Driver is bound to exactly one active Trip _or_ Delivery.
 - HTTP integration tests verify create replay, Customer ownership/IDOR,
   concurrent accept replay, concurrent competing Delivery matching, offer
-  expiry release, custody replay, proof validation, and completion replay.
+  expiry release, custody replay, proof validation, completion replay, and
+  Driver assignment ownership.
 - API and contracts typechecks pass for this slice.
 
 ## Remaining M7 path

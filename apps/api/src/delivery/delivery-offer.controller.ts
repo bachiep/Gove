@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Headers,
+  Get,
   HttpStatus,
   Inject,
   Param,
@@ -34,6 +35,15 @@ export class DeliveryOfferController {
   constructor(
     @Inject(DeliveryService) private readonly deliveries: DeliveryService,
   ) {}
+
+  @Get('delivery-assignments/:deliveryId')
+  @ApiOperation({ summary: 'Read one Driver-owned Delivery status projection' })
+  findForDriver(@CurrentActor() actor: SessionActor, @Param() params: unknown) {
+    return this.deliveries.findForDriver(
+      actor.id,
+      parseInput(deliveryParamsSchema, params).deliveryId,
+    );
+  }
 
   @Post('delivery-offers/:offerId/accept')
   @ApiOperation({ summary: 'Accept one pending Delivery Offer' })

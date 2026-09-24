@@ -70,6 +70,22 @@ export class DeliveryService {
     );
   }
 
+  async findForDriver(
+    driverUserId: string,
+    deliveryId: string,
+  ): Promise<DeliveryResponse> {
+    const delivery = await this.repository.findForDriver(
+      driverUserId,
+      deliveryId,
+    );
+    if (delivery) return delivery;
+    throw new ApiError(
+      HttpStatus.NOT_FOUND,
+      'DELIVERY_NOT_FOUND',
+      'The Delivery was not found.',
+    );
+  }
+
   async startMatching(input: {
     customerUserId: string;
     deliveryId: string;

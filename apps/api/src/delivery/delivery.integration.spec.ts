@@ -388,6 +388,52 @@ describe('Delivery HTTP seam', () => {
     });
   });
 
+  it('returns Delivery status only to its assigned Driver', async () => {
+    const customer = await customerSession();
+    const driver = await driverSession();
+    const otherDriver = await driverSession();
+    await setAllAvailableDriversOffline();
+    await approveDriver(driver.actorId);
+    await approveDriver(otherDriver.actorId);
+    await sendLocationAndGoOnline(driver.accessToken);
+    const created = await createDelivery(
+      customer.accessToken,
+      randomUUID(),
+      deliveryPayload('Driver read'),
+    );
+    const deliveryId = created.json().id as string;
+    const matching = await startMatching(
+      customer.accessToken,
+      deliveryId,
+      randomUUID(),
+    );
+    await acceptOffer(
+      driver.accessToken,
+      matching.json().offer.id as string,
+      randomUUID(),
+    );
+
+    const ownRead = await server.inject({
+      method: 'GET',
+      url: `/api/v1/delivery-assignments/${deliveryId}`,
+      headers: { authorization: `Bearer ${driver.accessToken}` },
+    });
+    expect(ownRead.statusCode).toBe(200);
+    expect(ownRead.json()).toMatchObject({
+      id: deliveryId,
+      state: 'DRIVER_TO_PICKUP',
+    });
+    expect(ownRead.json()).not.toHaveProperty('recipientContactPhone');
+
+    const otherRead = await server.inject({
+      method: 'GET',
+      url: `/api/v1/delivery-assignments/${deliveryId}`,
+      headers: { authorization: `Bearer ${otherDriver.accessToken}` },
+    });
+    expect(otherRead.statusCode).toBe(404);
+    expect(otherRead.json().code).toBe('DELIVERY_NOT_FOUND');
+  });
+
   async function customerToken(): Promise<string> {
     return (await customerSession()).accessToken;
   }
