@@ -105,10 +105,38 @@ export class DeliveryService {
     }
   }
 
+  async transitionAssignedDelivery(input: {
+    driverUserId: string;
+    deliveryId: string;
+    action: 'ARRIVE_AT_PICKUP' | 'CONFIRM_PICKUP_CUSTODY' | 'COMPLETE_DELIVERY';
+    idempotencyKey: string;
+    correlationId?: string;
+    confirmation?: string;
+  }): Promise<DeliveryResponse> {
+    try {
+      return await this.repository.transitionAssignedDelivery({
+        ...input,
+        correlationId: input.correlationId ?? randomUUID(),
+        requestFingerprint: createHash('sha256')
+          .update(
+            JSON.stringify({
+              deliveryId: input.deliveryId,
+              confirmation: input.confirmation ?? null,
+            }),
+          )
+          .digest(),
+      });
+    } catch (error) {
+      throw this.mapDispatchError(error);
+    }
+  }
+
   private mapDispatchError(error: unknown): ApiError {
     if (!(error instanceof DeliveryCommandError)) throw error;
     const status =
-      error.code === 'DELIVERY_NOT_FOUND' || error.code === 'OFFER_NOT_FOUND'
+      error.code === 'DELIVERY_NOT_FOUND' ||
+      error.code === 'OFFER_NOT_FOUND' ||
+      error.code === 'DELIVERY_NOT_ASSIGNED_TO_DRIVER'
         ? HttpStatus.NOT_FOUND
         : HttpStatus.CONFLICT;
     const messages: Record<DeliveryCommandError['code'], string> = {
@@ -123,6 +151,10 @@ export class DeliveryService {
       OFFER_EXPIRED: 'The Delivery Offer has expired.',
       DRIVER_WORK_STATE_CONFLICT:
         'The Driver has an active operational commitment.',
+      DELIVERY_NOT_ASSIGNED_TO_DRIVER:
+        'The Driver is not assigned to this Delivery.',
+      DELIVERY_INVALID_STATE:
+        'The Delivery is not ready for this Driver action.',
     };
     return new ApiError(status, error.code, messages[error.code]);
   }

@@ -276,6 +276,118 @@ describe('Delivery HTTP seam', () => {
     });
   });
 
+  it('records custody and recipient proof before completing a Delivery', async () => {
+    const customer = await customerSession();
+    const driver = await driverSession();
+    await setAllAvailableDriversOffline();
+    await approveDriver(driver.actorId);
+    await sendLocationAndGoOnline(driver.accessToken);
+    const created = await createDelivery(
+      customer.accessToken,
+      randomUUID(),
+      deliveryPayload('Lifecycle'),
+    );
+    const deliveryId = created.json().id as string;
+    const matching = await startMatching(
+      customer.accessToken,
+      deliveryId,
+      randomUUID(),
+    );
+    const accepted = await acceptOffer(
+      driver.accessToken,
+      matching.json().offer.id as string,
+      randomUUID(),
+    );
+    expect(accepted.statusCode).toBe(201);
+
+    const arrived = await transitionDelivery(
+      driver.accessToken,
+      deliveryId,
+      'arrive',
+      randomUUID(),
+    );
+    expect(arrived.statusCode).toBe(201);
+    expect(arrived.json()).toMatchObject({ state: 'AT_PICKUP', version: 3 });
+
+    const missingProof = await completeDelivery(
+      driver.accessToken,
+      deliveryId,
+      { recipientProof: '' },
+      randomUUID(),
+    );
+    expect(missingProof.statusCode).toBe(400);
+
+    const beforeCustody = await completeDelivery(
+      driver.accessToken,
+      deliveryId,
+      { recipientProof: 'Attempt before custody' },
+      randomUUID(),
+    );
+    expect(beforeCustody.statusCode).toBe(409);
+    expect(beforeCustody.json().code).toBe('DELIVERY_INVALID_STATE');
+
+    const pickupKey = randomUUID();
+    const [pickedUp, pickupReplay] = await Promise.all([
+      pickupDelivery(
+        driver.accessToken,
+        deliveryId,
+        { custodyConfirmation: 'Parcel received intact' },
+        pickupKey,
+      ),
+      pickupDelivery(
+        driver.accessToken,
+        deliveryId,
+        { custodyConfirmation: 'Parcel received intact' },
+        pickupKey,
+      ),
+    ]);
+    expect(pickedUp.statusCode).toBe(201);
+    expect(pickupReplay.json()).toEqual(pickedUp.json());
+    expect(pickedUp.json()).toMatchObject({ state: 'IN_TRANSIT', version: 4 });
+
+    const completeKey = randomUUID();
+    const [completed, completeReplay] = await Promise.all([
+      completeDelivery(
+        driver.accessToken,
+        deliveryId,
+        { recipientProof: 'Recipient confirmed handoff' },
+        completeKey,
+      ),
+      completeDelivery(
+        driver.accessToken,
+        deliveryId,
+        { recipientProof: 'Recipient confirmed handoff' },
+        completeKey,
+      ),
+    ]);
+    expect(completed.statusCode).toBe(201);
+    expect(completeReplay.json()).toEqual(completed.json());
+    expect(completed.json()).toMatchObject({ state: 'DELIVERED', version: 5 });
+
+    const durable = await database.query<{
+      assignment_status: string;
+      work_state: string;
+      current_delivery_id: string | null;
+      custody_confirmation: string;
+      recipient_proof: string;
+    }>(
+      `SELECT a.status AS assignment_status, ws.work_state, ws.current_delivery_id,
+              a.pickup_custody_confirmation AS custody_confirmation, p.confirmation_text AS recipient_proof
+       FROM delivery.assignments a
+       JOIN dispatch.driver_work_states ws ON ws.driver_user_id = a.driver_user_id
+       JOIN delivery.delivery_proofs p ON p.delivery_id = a.delivery_id
+       WHERE a.delivery_id = $1`,
+      [deliveryId],
+    );
+    expect(durable.rows[0]).toMatchObject({
+      assignment_status: 'COMPLETED',
+      work_state: 'AVAILABLE',
+      current_delivery_id: null,
+      custody_confirmation: 'Parcel received intact',
+      recipient_proof: 'Recipient confirmed handoff',
+    });
+  });
+
   async function customerToken(): Promise<string> {
     return (await customerSession()).accessToken;
   }
@@ -438,6 +550,56 @@ describe('Delivery HTTP seam', () => {
         authorization: `Bearer ${accessToken}`,
         'idempotency-key': idempotencyKey,
       },
+    });
+  }
+
+  function transitionDelivery(
+    accessToken: string,
+    deliveryId: string,
+    action: 'arrive',
+    idempotencyKey: string,
+  ) {
+    return server.inject({
+      method: 'POST',
+      url: `/api/v1/deliveries/${deliveryId}/${action}`,
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'idempotency-key': idempotencyKey,
+      },
+    });
+  }
+
+  function pickupDelivery(
+    accessToken: string,
+    deliveryId: string,
+    payload: { custodyConfirmation: string },
+    idempotencyKey: string,
+  ) {
+    return server.inject({
+      method: 'POST',
+      url: `/api/v1/deliveries/${deliveryId}/pickup`,
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'idempotency-key': idempotencyKey,
+      },
+      payload,
+    });
+  }
+
+  function completeDelivery(
+    accessToken: string,
+    deliveryId: string,
+    payload: { recipientProof: string },
+    idempotencyKey: string,
+  ) {
+    return server.inject({
+      method: 'POST',
+      url: `/api/v1/deliveries/${deliveryId}/complete`,
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'idempotency-key': idempotencyKey,
+      },
+      payload,
     });
   }
 });

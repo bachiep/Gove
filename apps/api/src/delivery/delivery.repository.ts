@@ -374,6 +374,164 @@ export class DeliveryRepository {
     });
   }
 
+  async transitionAssignedDelivery(input: {
+    driverUserId: string;
+    deliveryId: string;
+    action: 'ARRIVE_AT_PICKUP' | 'CONFIRM_PICKUP_CUSTODY' | 'COMPLETE_DELIVERY';
+    idempotencyKey: string;
+    requestFingerprint: Buffer;
+    correlationId: string;
+    confirmation?: string;
+  }): Promise<DeliveryResponse> {
+    return this.database.transaction(async (executor) => {
+      const operation = `DELIVERY_${input.action}`;
+      await executor.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `${input.driverUserId}:${operation}:${input.idempotencyKey}`,
+      ]);
+      const prior = await executor.query<{
+        request_fingerprint: Buffer;
+        response_body: DeliveryResponse;
+      }>(
+        `SELECT request_fingerprint, response_body FROM delivery.command_receipts
+         WHERE actor_user_id = $1 AND operation = $2 AND idempotency_key = $3 FOR UPDATE`,
+        [input.driverUserId, operation, input.idempotencyKey],
+      );
+      if (prior.rows[0]) {
+        if (
+          !sameDigest(
+            prior.rows[0].request_fingerprint,
+            input.requestFingerprint,
+          )
+        )
+          throw new DeliveryCommandError('IDEMPOTENCY_KEY_REUSED');
+        return prior.rows[0].response_body;
+      }
+      const assigned = await executor.query<AssignedDeliveryRow>(
+        `SELECT d.id, d.state, d.version, d.pickup_label,
+                ST_X(d.pickup_location::geometry) AS pickup_longitude, ST_Y(d.pickup_location::geometry) AS pickup_latitude,
+                d.dropoff_label, ST_X(d.dropoff_location::geometry) AS dropoff_longitude, ST_Y(d.dropoff_location::geometry) AS dropoff_latitude,
+                d.recipient_display_name, d.parcel_description, d.declared_weight_grams, d.created_at,
+                a.id AS assignment_id, a.status AS assignment_status, ws.work_state
+         FROM delivery.deliveries d
+         JOIN delivery.assignments a ON a.delivery_id = d.id
+         JOIN dispatch.driver_work_states ws ON ws.driver_user_id = a.driver_user_id
+         WHERE d.id = $1 AND a.driver_user_id = $2
+         FOR UPDATE OF d, a, ws`,
+        [input.deliveryId, input.driverUserId],
+      );
+      const row = assigned.rows[0];
+      if (!row) {
+        const exists = await executor.query<{ id: string }>(
+          'SELECT id FROM delivery.deliveries WHERE id = $1',
+          [input.deliveryId],
+        );
+        throw new DeliveryCommandError(
+          exists.rows[0]
+            ? 'DELIVERY_NOT_ASSIGNED_TO_DRIVER'
+            : 'DELIVERY_NOT_FOUND',
+        );
+      }
+      const policy = deliveryTransitionPolicy(input.action);
+      if (
+        row.assignment_status !== 'ACTIVE' ||
+        row.state !== policy.fromState ||
+        row.work_state !== policy.workStateFrom
+      )
+        throw new DeliveryCommandError('DELIVERY_INVALID_STATE');
+      const nextVersion = row.version + 1;
+      const deliveryUpdate = await executor.query(
+        `UPDATE delivery.deliveries SET state = $2, version = $3, updated_at = now()
+         WHERE id = $1 AND state = $4 AND version = $5`,
+        [row.id, policy.toState, nextVersion, policy.fromState, row.version],
+      );
+      if (deliveryUpdate.rowCount !== 1)
+        throw new DeliveryCommandError('DELIVERY_INVALID_STATE');
+      if (input.action === 'CONFIRM_PICKUP_CUSTODY') {
+        await executor.query(
+          `UPDATE delivery.assignments SET pickup_custody_confirmation = $2, pickup_confirmed_at = now()
+           WHERE id = $1 AND status = 'ACTIVE' AND pickup_custody_confirmation IS NULL`,
+          [row.assignment_id, input.confirmation],
+        );
+      }
+      if (input.action === 'COMPLETE_DELIVERY') {
+        await executor.query(
+          `INSERT INTO delivery.delivery_proofs (id, delivery_id, assignment_id, recorded_by_user_id, confirmation_text)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            randomUUID(),
+            row.id,
+            row.assignment_id,
+            input.driverUserId,
+            input.confirmation,
+          ],
+        );
+        await executor.query(
+          `UPDATE delivery.assignments SET status = 'COMPLETED', completed_at = now() WHERE id = $1 AND status = 'ACTIVE'`,
+          [row.assignment_id],
+        );
+      }
+      const work = await executor.query(
+        `UPDATE dispatch.driver_work_states SET work_state = $2, current_delivery_id = $3,
+            state_version = state_version + 1, state_changed_at = now(), updated_at = now()
+         WHERE driver_user_id = $1 AND work_state = $4 AND current_delivery_id = $5 AND current_trip_id IS NULL`,
+        [
+          input.driverUserId,
+          policy.workStateTo,
+          input.action === 'COMPLETE_DELIVERY' ? null : row.id,
+          policy.workStateFrom,
+          row.id,
+        ],
+      );
+      if (work.rowCount !== 1)
+        throw new DeliveryCommandError('DRIVER_WORK_STATE_CONFLICT');
+      await appendTransition(
+        executor,
+        row.id,
+        input.driverUserId,
+        input.action,
+        policy.fromState,
+        policy.toState,
+        row.version,
+        nextVersion,
+        input.correlationId,
+      );
+      await executor.query(
+        `INSERT INTO delivery.outbox_events (id, delivery_id, aggregate_version, event_type, payload)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          randomUUID(),
+          row.id,
+          nextVersion,
+          policy.eventType,
+          JSON.stringify({
+            deliveryId: row.id,
+            driverUserId: input.driverUserId,
+            state: policy.toState,
+            version: nextVersion,
+          }),
+        ],
+      );
+      const response = toDeliveryResponse({
+        ...row,
+        state: policy.toState,
+        version: nextVersion,
+      });
+      await executor.query(
+        `INSERT INTO delivery.command_receipts (actor_user_id, operation, idempotency_key, request_fingerprint, response_body, delivery_id)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          input.driverUserId,
+          operation,
+          input.idempotencyKey,
+          input.requestFingerprint,
+          JSON.stringify(response),
+          row.id,
+        ],
+      );
+      return response;
+    });
+  }
+
   async expireDueOffers(): Promise<number> {
     const due = await this.database.query<{ id: string }>(
       `SELECT id FROM delivery.delivery_offers WHERE status = 'PENDING' AND expires_at <= now() ORDER BY expires_at LIMIT 50`,
@@ -432,7 +590,9 @@ export class DeliveryCommandError extends Error {
       | 'OFFER_NOT_FOR_DRIVER'
       | 'OFFER_ALREADY_RESOLVED'
       | 'OFFER_EXPIRED'
-      | 'DRIVER_WORK_STATE_CONFLICT',
+      | 'DRIVER_WORK_STATE_CONFLICT'
+      | 'DELIVERY_NOT_ASSIGNED_TO_DRIVER'
+      | 'DELIVERY_INVALID_STATE',
   ) {
     super(code);
   }
@@ -448,6 +608,68 @@ interface OfferRow extends QueryResultRow {
   delivery_state: DeliveryResponse['state'];
   delivery_version: number;
   acceptance_idempotency_key: string | null;
+}
+
+interface AssignedDeliveryRow extends DeliveryDetailRow {
+  assignment_id: string;
+  assignment_status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  work_state: 'TO_PICKUP' | 'ON_TRIP' | 'AVAILABLE';
+}
+
+function toDeliveryResponse(row: DeliveryDetailRow): DeliveryResponse {
+  return {
+    id: row.id,
+    state: row.state,
+    version: row.version,
+    pickup: {
+      label: row.pickup_label,
+      latitude: finiteNumber(row.pickup_latitude),
+      longitude: finiteNumber(row.pickup_longitude),
+    },
+    dropoff: {
+      label: row.dropoff_label,
+      latitude: finiteNumber(row.dropoff_latitude),
+      longitude: finiteNumber(row.dropoff_longitude),
+    },
+    recipientDisplayName: row.recipient_display_name,
+    parcelDescription: row.parcel_description,
+    declaredWeightGrams: row.declared_weight_grams,
+    createdAt: row.created_at.toISOString(),
+  };
+}
+
+function deliveryTransitionPolicy(
+  action: 'ARRIVE_AT_PICKUP' | 'CONFIRM_PICKUP_CUSTODY' | 'COMPLETE_DELIVERY',
+): {
+  fromState: DeliveryResponse['state'];
+  toState: DeliveryResponse['state'];
+  workStateFrom: 'TO_PICKUP' | 'ON_TRIP';
+  workStateTo: 'TO_PICKUP' | 'ON_TRIP' | 'AVAILABLE';
+  eventType: string;
+} {
+  if (action === 'ARRIVE_AT_PICKUP')
+    return {
+      fromState: 'DRIVER_TO_PICKUP',
+      toState: 'AT_PICKUP',
+      workStateFrom: 'TO_PICKUP',
+      workStateTo: 'TO_PICKUP',
+      eventType: 'delivery.driver.arrived_at_pickup',
+    };
+  if (action === 'CONFIRM_PICKUP_CUSTODY')
+    return {
+      fromState: 'AT_PICKUP',
+      toState: 'IN_TRANSIT',
+      workStateFrom: 'TO_PICKUP',
+      workStateTo: 'ON_TRIP',
+      eventType: 'delivery.pickup.custody_confirmed',
+    };
+  return {
+    fromState: 'IN_TRANSIT',
+    toState: 'DELIVERED',
+    workStateFrom: 'ON_TRIP',
+    workStateTo: 'AVAILABLE',
+    eventType: 'delivery.completed',
+  };
 }
 
 async function reserveOffer(

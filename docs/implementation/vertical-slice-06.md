@@ -6,9 +6,11 @@ Last updated: 2026-09-24
 ## Scope completed
 
 This M7 implementation establishes Delivery as an independent durable
-aggregate. A Customer can create/read a one-pickup/one-dropoff parcel Delivery,
-start matching, and a Driver can idempotently accept its offer. PostgreSQL
-records state transitions in the same transaction as the state change.
+aggregate. A Customer can create/read a one-pickup/one-dropoff parcel Delivery
+and start matching; a Driver can idempotently accept its offer, arrive at
+Pickup, confirm custody, and complete recipient handoff with a bounded text
+proof. PostgreSQL records state transitions in the same transaction as each
+state change.
 
 ## Evidence
 
@@ -18,7 +20,8 @@ records state transitions in the same transaction as the state change.
   assignment records. It extends—not replaces—the shared Driver work state so
   a Driver is bound to exactly one active Trip _or_ Delivery.
 - HTTP integration tests verify create replay, Customer ownership/IDOR,
-  concurrent accept replay, and concurrent competing Delivery matching.
+  concurrent accept replay, concurrent competing Delivery matching, offer
+  expiry release, custody replay, proof validation, and completion replay.
 - API and contracts typechecks pass for this slice.
 
 ## Remaining M7 path
@@ -27,8 +30,6 @@ records state transitions in the same transaction as the state change.
 Delivery Request
   → Delivery matching and exclusive Driver reservation
   → Driver accepts
-  → Pickup custody confirmation
-  → Recipient proof and Delivery completion
   → Rebuildable realtime status and Customer/Driver PWA flows
 ```
 

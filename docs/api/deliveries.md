@@ -41,9 +41,25 @@ Delivery-owned reservation/assignment and transitions the Delivery to
 the in-process expiry worker releases the shared Driver work state and closes
 the Delivery as `NO_DRIVER_AVAILABLE` when no retry is implemented.
 
+### Driver delivery lifecycle
+
+The assigned Driver uses an `Idempotency-Key` for each command:
+
+- `POST /api/v1/deliveries/:deliveryId/arrive` moves
+  `DRIVER_TO_PICKUP` to `AT_PICKUP`.
+- `POST /api/v1/deliveries/:deliveryId/pickup` requires a 1–120 character
+  `custodyConfirmation` and moves `AT_PICKUP` to `IN_TRANSIT`.
+- `POST /api/v1/deliveries/:deliveryId/complete` requires a 1–120 character
+  `recipientProof` and moves `IN_TRANSIT` to `DELIVERED`.
+
+The proof is bounded confirmation text, not a photo, signature, or identity
+document. Completion writes proof, closes the assignment, releases the shared
+Driver work state, records a versioned state transition, and writes an outbox
+event in one transaction.
+
 ## Not implemented yet
 
-Driver pickup custody, recipient proof, delivery completion, Driver reads,
-history, payment, realtime Delivery projections, offer retry/reassignment, and
-PWA screens remain M7 work. They must use Delivery records rather than changing
-Trip semantics.
+Driver/customer status projections, history, payment, realtime Delivery
+projections, offer retry/reassignment, cancellation rules, and PWA screens
+remain M7 work. They must use Delivery records rather than changing Trip
+semantics.

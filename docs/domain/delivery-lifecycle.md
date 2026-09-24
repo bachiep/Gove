@@ -1,6 +1,6 @@
 # Delivery Lifecycle
 
-Status: Designed; request/read foundation implemented
+Status: Partially implemented and tested locally
 Last updated: 2026-09-24
 
 Delivery is a separate logistics aggregate. It may reuse a Driver, Pickup,
@@ -25,13 +25,13 @@ Terminal states are `DELIVERED`, `CANCELLED`, and `NO_DRIVER_AVAILABLE`.
 
 ## Essential transitions
 
-| From               | To                 | Initiator               | Guard                                                               |
-| ------------------ | ------------------ | ----------------------- | ------------------------------------------------------------------- |
-| `REQUESTED`        | `MATCHING`         | System                  | Valid parcel, recipient, Pickup, Dropoff, and quote snapshot exist. |
-| `MATCHING`         | `DRIVER_TO_PICKUP` | Driver through Dispatch | Pending unexpired Delivery Offer and exclusive reservation exist.   |
-| `DRIVER_TO_PICKUP` | `AT_PICKUP`        | Assigned Driver         | Active Delivery assignment exists.                                  |
-| `AT_PICKUP`        | `IN_TRANSIT`       | Assigned Driver         | Pickup custody confirmation is present.                             |
-| `IN_TRANSIT`       | `DELIVERED`        | Assigned Driver         | Recipient handoff and required Delivery Proof are present.          |
+| From               | To                 | Initiator               | Guard                                                             |
+| ------------------ | ------------------ | ----------------------- | ----------------------------------------------------------------- |
+| `REQUESTED`        | `MATCHING`         | System                  | Valid parcel, recipient, and distinct Pickup/Dropoff exist.       |
+| `MATCHING`         | `DRIVER_TO_PICKUP` | Driver through Dispatch | Pending unexpired Delivery Offer and exclusive reservation exist. |
+| `DRIVER_TO_PICKUP` | `AT_PICKUP`        | Assigned Driver         | Active Delivery assignment exists.                                |
+| `AT_PICKUP`        | `IN_TRANSIT`       | Assigned Driver         | Pickup custody confirmation is present.                           |
+| `IN_TRANSIT`       | `DELIVERED`        | Assigned Driver         | Recipient handoff and required Delivery Proof are present.        |
 
 Cancellation, expiry, reassignment, version checks, command receipts, and
 outbox writes follow the same correctness principles as ride Dispatch, but use
@@ -39,7 +39,7 @@ Delivery-owned records and Delivery versioning.
 
 ## M7 proof boundary
 
-The first parcel slice records a text confirmation code or recipient name only;
+The first parcel slice records bounded pickup custody and recipient proof text;
 it does not store photos, signatures, or identity documents. A later photo or
 signature design requires retention, access-control, encryption, and privacy
 decisions before implementation.

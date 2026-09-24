@@ -33,3 +33,11 @@ export type CreateDeliveryInput = z.infer<typeof createDeliverySchema>;
 
 export const deliveryParamsSchema = z.object({ deliveryId: z.uuid() });
 export const deliveryOfferParamsSchema = z.object({ offerId: z.uuid() });
+
+export const pickupDeliverySchema = z.object({
+  custodyConfirmation: z.string().trim().min(1).max(120),
+});
+
+export const completeDeliverySchema = z.object({
+  recipientProof: z.string().trim().min(1).max(120),
+});
